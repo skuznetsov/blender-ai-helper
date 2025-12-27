@@ -15,6 +15,7 @@ from ..sketch.constraints import (
     ParallelConstraint,
     MidpointConstraint,
     EqualLengthConstraint,
+    SymmetryConstraint,
     SketchConstraint,
     PerpendicularConstraint,
     VerticalConstraint,
@@ -97,6 +98,8 @@ def solve(
                 err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, ConcentricConstraint):
                 err = _apply_concentric(points, constraint)
+            elif isinstance(constraint, SymmetryConstraint):
+                err = _apply_symmetry(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -183,6 +186,8 @@ def solve(
                 err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, ConcentricConstraint):
                 err = _apply_concentric(points, constraint)
+            elif isinstance(constraint, SymmetryConstraint):
+                err = _apply_symmetry(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -456,6 +461,8 @@ def _constraint_error(
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=90.0)
     if isinstance(constraint, ConcentricConstraint):
         return _distance_error(points, constraint.p1, constraint.p2, 0.0)
+    if isinstance(constraint, SymmetryConstraint):
+        return _symmetry_error(points, line_map, constraint)
     if isinstance(constraint, MidpointConstraint):
         return _midpoint_error(points, line_map, constraint)
     if isinstance(constraint, EqualLengthConstraint):
@@ -697,6 +704,82 @@ def _midpoint_error(
 
 def _apply_concentric(points: Dict[str, PointState], c: ConcentricConstraint) -> float:
     return _apply_distance(points, DistanceConstraint(id=c.id, p1=c.p1, p2=c.p2, distance=0.0))
+
+
+def _apply_symmetry(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: SymmetryConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    a = points.get(line[0])
+    b = points.get(line[1])
+    p1 = points.get(c.p1)
+    p2 = points.get(c.p2)
+    if a is None or b is None or p1 is None or p2 is None:
+        return 0.0
+
+    vx = b.x - a.x
+    vy = b.y - a.y
+    len2 = vx * vx + vy * vy
+    if len2 < 1e-8:
+        return 0.0
+
+    r1x, r1y = _reflect_point(p1.x, p1.y, a.x, a.y, vx, vy, len2)
+    r2x, r2y = _reflect_point(p2.x, p2.y, a.x, a.y, vx, vy, len2)
+
+    if p1.locked and p2.locked:
+        return math.hypot(p2.x - r1x, p2.y - r1y)
+    if p1.locked and not p2.locked:
+        p2.x = r1x
+        p2.y = r1y
+        return 0.0
+    if p2.locked and not p1.locked:
+        p1.x = r2x
+        p1.y = r2y
+        return 0.0
+
+    p1.x = (p1.x + r2x) / 2.0
+    p1.y = (p1.y + r2y) / 2.0
+    p2.x = (p2.x + r1x) / 2.0
+    p2.y = (p2.y + r1y) / 2.0
+    return math.hypot(p2.x - r1x, p2.y - r1y)
+
+
+def _symmetry_error(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: SymmetryConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    a = points.get(line[0])
+    b = points.get(line[1])
+    p1 = points.get(c.p1)
+    p2 = points.get(c.p2)
+    if a is None or b is None or p1 is None or p2 is None:
+        return 0.0
+
+    vx = b.x - a.x
+    vy = b.y - a.y
+    len2 = vx * vx + vy * vy
+    if len2 < 1e-8:
+        return 0.0
+
+    r1x, r1y = _reflect_point(p1.x, p1.y, a.x, a.y, vx, vy, len2)
+    return math.hypot(p2.x - r1x, p2.y - r1y)
+
+
+def _reflect_point(px, py, ax, ay, vx, vy, len2):
+    t = ((px - ax) * vx + (py - ay) * vy) / len2
+    proj_x = ax + vx * t
+    proj_y = ay + vy * t
+    return (2.0 * proj_x - px, 2.0 * proj_y - py)
 
 
 def _apply_equal_length(

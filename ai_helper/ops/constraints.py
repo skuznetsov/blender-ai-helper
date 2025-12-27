@@ -13,6 +13,7 @@ from ..sketch.constraints import (
     ParallelConstraint,
     PerpendicularConstraint,
     RadiusConstraint,
+    SymmetryConstraint,
     MidpointConstraint,
     VerticalConstraint,
 )
@@ -74,6 +75,13 @@ def _shared_vertex_for_edges(edges):
 
 def _selected_vertices(obj):
     return [v for v in obj.data.vertices if v.select]
+
+
+def _selected_vertices_excluding_edge(obj, edge):
+    if edge is None:
+        return _selected_vertices(obj)
+    excluded = set(edge.vertices)
+    return [v for v in _selected_vertices(obj) if v.index not in excluded]
 
 
 def _distance_targets(obj):
@@ -286,6 +294,9 @@ def _select_constraint_geometry(obj, constraint, extend=False):
     elif isinstance(constraint, EqualLengthConstraint):
         edges = [int(constraint.line_a), int(constraint.line_b)]
     elif isinstance(constraint, ConcentricConstraint):
+        verts = [int(constraint.p1), int(constraint.p2)]
+    elif isinstance(constraint, SymmetryConstraint):
+        edges = [int(constraint.line)]
         verts = [int(constraint.p1), int(constraint.p2)]
     elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
         edges = [int(constraint.line)]
@@ -681,6 +692,44 @@ class AIHELPER_OT_add_concentric_constraint(bpy.types.Operator):
         _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Concentric constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_symmetry_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_symmetry_constraint"
+    bl_label = "Add Symmetry"
+    bl_description = "Make two vertices symmetric about a selected edge"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edge = _selected_edge(obj)
+        verts = _selected_vertices_excluding_edge(obj, edge)
+        if edge is None or len(verts) != 2:
+            self.report({"WARNING"}, "Select 1 edge and 2 vertices")
+            return {"CANCELLED"}
+
+        if verts[0].index == verts[1].index:
+            self.report({"WARNING"}, "Select 2 distinct vertices")
+            return {"CANCELLED"}
+
+        constraint = SymmetryConstraint(
+            id=new_constraint_id(),
+            line=str(edge.index),
+            p1=str(verts[0].index),
+            p2=str(verts[1].index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Symmetry constraint added")
         return {"FINISHED"}
 
 
@@ -1277,6 +1326,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_concentric_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_symmetry_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1316,6 +1366,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_concentric_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_symmetry_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

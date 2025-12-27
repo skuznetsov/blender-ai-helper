@@ -53,6 +53,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Midpoint constraint add (needs Blender validation).
   - [~] Equal length constraint add (needs Blender validation).
   - [~] Concentric constraint add (needs Blender validation).
+  - [~] Symmetry constraint add (needs Blender validation).
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
   - [~] Constraint add dialogs prefill current values (needs Blender validation).

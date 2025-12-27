@@ -117,6 +117,24 @@ class ConcentricConstraint:
 
 
 @dataclass
+class SymmetryConstraint:
+    id: str
+    line: str
+    p1: str
+    p2: str
+    kind: str = field(init=False, default="symmetry")
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "line": self.line,
+            "p1": self.p1,
+            "p2": self.p2,
+        }
+
+
+@dataclass
 class MidpointConstraint:
     id: str
     line: str
@@ -173,6 +191,7 @@ SketchConstraint = (
     | PerpendicularConstraint
     | CoincidentConstraint
     | ConcentricConstraint
+    | SymmetryConstraint
     | MidpointConstraint
     | EqualLengthConstraint
     | RadiusConstraint
@@ -222,6 +241,13 @@ def constraint_from_dict(data: Dict[str, object]) -> SketchConstraint:
     if kind == "concentric":
         return ConcentricConstraint(
             id=str(data["id"]),
+            p1=str(data["p1"]),
+            p2=str(data["p2"]),
+        )
+    if kind == "symmetry":
+        return SymmetryConstraint(
+            id=str(data["id"]),
+            line=str(data["line"]),
             p1=str(data["p1"]),
             p2=str(data["p2"]),
         )

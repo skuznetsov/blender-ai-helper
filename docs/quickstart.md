@@ -19,12 +19,13 @@
 - Polar input: `@len<angle` (degrees).
 - Press A to toggle auto constraints; press S to toggle snapping; hold Shift to temporarily disable snapping.
 - Add Circle: click Add Circle and enter center/radius in the dialog (defaults to 3D cursor).
-- Constraints: select edges or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Angle/Radius/Coincident/Midpoint/Equal Length/Concentric/Parallel/Perpendicular/Fix.
+- Constraints: select edges or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Angle/Radius/Coincident/Midpoint/Equal Length/Concentric/Symmetry/Parallel/Perpendicular/Fix.
 - Angle constraints: select two connected edges and set the target angle.
 - Radius constraints: select a circle vertex or edge to attach a radius.
 - Midpoint constraint: select an edge and a vertex to force the vertex to the edge midpoint.
 - Equal Length: select two edges to force them to equal length.
 - Concentric: select two circles to force the same center.
+- Symmetry: select an edge and two vertices to mirror them across the edge.
 - Precision edit: select a vertex and use Set Vertex Coords to enter exact coordinates.
 - Dimensions: use Update Dimensions to create text labels for distance, angle, and radius constraints.
 - Constraint list: use Sel to highlight the geometry for a constraint.
