@@ -22,6 +22,11 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Top constraint errors",
         default="",
     )
+    last_solver_worst_id: bpy.props.StringProperty(
+        name="Solver Worst ID",
+        description="Constraint id with the largest error",
+        default="",
+    )
     auto_rebuild: bpy.props.BoolProperty(
         name="Auto Rebuild 3D Ops",
         description="Automatically rebuild 3D ops when sketch updates",

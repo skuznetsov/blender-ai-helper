@@ -211,6 +211,37 @@ def _update_solver_report(context, diag):
     props = context.scene.ai_helper
     props.last_solver_report = _format_diag(diag)
     props.last_solver_details = _format_diag_details(diag)
+    props.last_solver_worst_id = diag.worst_constraint_id or ""
+
+
+def _select_constraint_geometry(obj, constraint, extend=False):
+    verts = []
+    edges = []
+    if isinstance(constraint, DistanceConstraint):
+        verts = [int(constraint.p1), int(constraint.p2)]
+    elif isinstance(constraint, AngleConstraint):
+        verts = [int(constraint.p1), int(constraint.vertex), int(constraint.p2)]
+    elif isinstance(constraint, FixConstraint):
+        verts = [int(constraint.point)]
+    elif isinstance(constraint, CoincidentConstraint):
+        verts = [int(constraint.p1), int(constraint.p2)]
+    elif isinstance(constraint, RadiusConstraint):
+        circles = load_circles(obj)
+        circle = find_circle(circles, constraint.entity)
+        if circle:
+            verts = [int(v) for v in circle.get("verts", [])]
+    elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
+        edges = [int(constraint.line)]
+    elif isinstance(constraint, (ParallelConstraint, PerpendicularConstraint)):
+        edges = [int(constraint.line_a), int(constraint.line_b)]
+    else:
+        return False, "Constraint type not supported for selection"
+
+    if not verts and not edges:
+        return False, "No geometry found for constraint"
+
+    _set_selection(obj, verts=verts, edges=edges, extend=extend)
+    return True, ""
 
 
 class AIHELPER_OT_add_distance_constraint(bpy.types.Operator):
@@ -586,6 +617,7 @@ class AIHELPER_OT_clear_constraints(bpy.types.Operator):
         clear_dimensions(context)
         context.scene.ai_helper.last_solver_report = ""
         context.scene.ai_helper.last_solver_details = ""
+        context.scene.ai_helper.last_solver_worst_id = ""
         self.report({"INFO"}, "Constraints cleared")
         return {"FINISHED"}
 
@@ -970,35 +1002,52 @@ class AIHELPER_OT_select_constraint(bpy.types.Operator):
             self.report({"WARNING"}, "Constraint not found")
             return {"CANCELLED"}
 
-        verts = []
-        edges = []
-        if isinstance(target, DistanceConstraint):
-            verts = [int(target.p1), int(target.p2)]
-        elif isinstance(target, AngleConstraint):
-            verts = [int(target.p1), int(target.vertex), int(target.p2)]
-        elif isinstance(target, FixConstraint):
-            verts = [int(target.point)]
-        elif isinstance(target, CoincidentConstraint):
-            verts = [int(target.p1), int(target.p2)]
-        elif isinstance(target, RadiusConstraint):
-            circles = load_circles(obj)
-            circle = find_circle(circles, target.entity)
-            if circle:
-                verts = [int(v) for v in circle.get("verts", [])]
-        elif isinstance(target, (HorizontalConstraint, VerticalConstraint)):
-            edges = [int(target.line)]
-        elif isinstance(target, (ParallelConstraint, PerpendicularConstraint)):
-            edges = [int(target.line_a), int(target.line_b)]
-        else:
-            self.report({"WARNING"}, "Constraint type not supported for selection")
+        context.view_layer.objects.active = obj
+        ok, message = _select_constraint_geometry(obj, target, extend=self.extend)
+        if not ok:
+            self.report({"WARNING"}, message)
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_select_worst_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.select_worst_constraint"
+    bl_label = "Select Worst"
+    bl_description = "Select geometry for the worst constraint error"
+    bl_options = {"REGISTER", "UNDO"}
+
+    extend: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    def invoke(self, context, event):
+        self.extend = bool(event.shift)
+        return self.execute(context)
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        if not verts and not edges:
-            self.report({"WARNING"}, "No geometry found for constraint")
+        constraint_id = context.scene.ai_helper.last_solver_worst_id
+        if not constraint_id:
+            self.report({"WARNING"}, "No solver diagnostics available")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        target = None
+        for constraint in constraints:
+            if getattr(constraint, "id", None) == constraint_id:
+                target = constraint
+                break
+        if target is None:
+            self.report({"WARNING"}, "Worst constraint not found")
             return {"CANCELLED"}
 
         context.view_layer.objects.active = obj
-        _set_selection(obj, verts=verts, edges=edges, extend=self.extend)
+        ok, message = _select_constraint_geometry(obj, target, extend=self.extend)
+        if not ok:
+            self.report({"WARNING"}, message)
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -1021,9 +1070,11 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_clear_dimensions)
     bpy.utils.register_class(AIHELPER_OT_edit_selected_dimension)
     bpy.utils.register_class(AIHELPER_OT_select_constraint)
+    bpy.utils.register_class(AIHELPER_OT_select_worst_constraint)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_select_worst_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_select_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_selected_dimension)
     bpy.utils.unregister_class(AIHELPER_OT_clear_dimensions)

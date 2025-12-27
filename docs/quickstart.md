@@ -25,6 +25,7 @@
 - Precision edit: select a vertex and use Set Vertex Coords to enter exact coordinates.
 - Dimensions: use Update Dimensions to create text labels for distance, angle, and radius constraints.
 - Constraint list: use Sel to highlight the geometry for a constraint.
+- Diagnostics: use Select Worst to jump to the largest error after solve.
 - Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 - Auto rebuild: toggle Auto Rebuild 3D Ops in the 3D Ops panel.
