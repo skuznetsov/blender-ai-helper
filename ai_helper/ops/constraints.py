@@ -14,6 +14,7 @@ from ..sketch.constraints import (
     PerpendicularConstraint,
     RadiusConstraint,
     SymmetryConstraint,
+    TangentConstraint,
     MidpointConstraint,
     VerticalConstraint,
 )
@@ -37,6 +38,7 @@ from ..sketch.store import (
     load_constraints,
     new_constraint_id,
     remove_constraint,
+    save_constraints,
     update_constraint,
 )
 
@@ -209,6 +211,23 @@ def _selected_circles(obj):
     return found
 
 
+def _update_tangent_radii(obj, circle_id: str, radius: float) -> None:
+    constraints = load_constraints(obj)
+    updated = False
+    for idx, constraint in enumerate(constraints):
+        if isinstance(constraint, TangentConstraint) and constraint.circle == circle_id:
+            constraints[idx] = TangentConstraint(
+                id=constraint.id,
+                line=constraint.line,
+                circle=constraint.circle,
+                center=constraint.center,
+                radius=radius,
+            )
+            updated = True
+    if updated:
+        save_constraints(obj, constraints)
+
+
 def _set_selection(obj, verts=None, edges=None, extend=False):
     verts = verts or []
     edges = edges or []
@@ -298,6 +317,12 @@ def _select_constraint_geometry(obj, constraint, extend=False):
     elif isinstance(constraint, SymmetryConstraint):
         edges = [int(constraint.line)]
         verts = [int(constraint.p1), int(constraint.p2)]
+    elif isinstance(constraint, TangentConstraint):
+        edges = [int(constraint.line)]
+        circles = load_circles(obj)
+        circle = find_circle(circles, constraint.circle)
+        if circle:
+            verts = [int(v) for v in circle.get("verts", [])]
     elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
         edges = [int(constraint.line)]
     elif isinstance(constraint, (ParallelConstraint, PerpendicularConstraint)):
@@ -542,6 +567,7 @@ class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
         )
         append_constraint(obj, constraint)
         update_circle_radius(obj, constraint.entity, radius)
+        _update_tangent_radii(obj, constraint.entity, radius)
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
@@ -730,6 +756,47 @@ class AIHELPER_OT_add_symmetry_constraint(bpy.types.Operator):
         _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Symmetry constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_tangent_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_tangent_constraint"
+    bl_label = "Add Tangent"
+    bl_description = "Make a selected edge tangent to a selected circle"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edge = _selected_edge(obj)
+        circle = _selected_circle(obj)
+        if edge is None or circle is None:
+            self.report({"WARNING"}, "Select 1 edge and 1 circle")
+            return {"CANCELLED"}
+
+        center = circle.get("center")
+        radius = _circle_current_radius(obj, circle)
+        if not center or radius is None:
+            self.report({"WARNING"}, "Circle metadata missing")
+            return {"CANCELLED"}
+
+        constraint = TangentConstraint(
+            id=new_constraint_id(),
+            line=str(edge.index),
+            circle=str(circle["id"]),
+            center=str(center),
+            radius=radius,
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Tangent constraint added")
         return {"FINISHED"}
 
 
@@ -1065,6 +1132,7 @@ class AIHELPER_OT_edit_radius_constraint(bpy.types.Operator):
         def updater(constraint):
             if isinstance(constraint, RadiusConstraint):
                 update_circle_radius(obj, constraint.entity, self.radius)
+                _update_tangent_radii(obj, constraint.entity, self.radius)
                 return RadiusConstraint(
                     id=constraint.id,
                     entity=constraint.entity,
@@ -1327,6 +1395,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_concentric_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_symmetry_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_tangent_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1367,6 +1436,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_concentric_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_symmetry_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_tangent_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

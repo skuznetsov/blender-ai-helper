@@ -16,6 +16,7 @@ from ..sketch.constraints import (
     MidpointConstraint,
     EqualLengthConstraint,
     SymmetryConstraint,
+    TangentConstraint,
     SketchConstraint,
     PerpendicularConstraint,
     VerticalConstraint,
@@ -100,6 +101,8 @@ def solve(
                 err = _apply_concentric(points, constraint)
             elif isinstance(constraint, SymmetryConstraint):
                 err = _apply_symmetry(points, line_map, constraint)
+            elif isinstance(constraint, TangentConstraint):
+                err = _apply_tangent(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -188,6 +191,8 @@ def solve(
                 err = _apply_concentric(points, constraint)
             elif isinstance(constraint, SymmetryConstraint):
                 err = _apply_symmetry(points, line_map, constraint)
+            elif isinstance(constraint, TangentConstraint):
+                err = _apply_tangent(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -463,6 +468,8 @@ def _constraint_error(
         return _distance_error(points, constraint.p1, constraint.p2, 0.0)
     if isinstance(constraint, SymmetryConstraint):
         return _symmetry_error(points, line_map, constraint)
+    if isinstance(constraint, TangentConstraint):
+        return _tangent_error(points, line_map, constraint)
     if isinstance(constraint, MidpointConstraint):
         return _midpoint_error(points, line_map, constraint)
     if isinstance(constraint, EqualLengthConstraint):
@@ -780,6 +787,100 @@ def _reflect_point(px, py, ax, ay, vx, vy, len2):
     proj_x = ax + vx * t
     proj_y = ay + vy * t
     return (2.0 * proj_x - px, 2.0 * proj_y - py)
+
+
+def _apply_tangent(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: TangentConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    a = points.get(line[0])
+    b = points.get(line[1])
+    center = points.get(c.center)
+    if a is None or b is None or center is None:
+        return 0.0
+
+    radius = c.radius
+    if radius <= 0.0:
+        return 0.0
+
+    vx = b.x - a.x
+    vy = b.y - a.y
+    length = math.hypot(vx, vy)
+    if length < 1e-8:
+        return 0.0
+
+    nx = -vy / length
+    ny = vx / length
+    d = (center.x - a.x) * nx + (center.y - a.y) * ny
+    sign = 1.0 if d >= 0.0 else -1.0
+    target = sign * radius
+    err = d - target
+    if abs(err) < 1e-8:
+        return 0.0
+
+    w_center = 0.0 if center.locked else 1.0
+    w_line = (0.5 if not a.locked else 0.0) + (0.5 if not b.locked else 0.0)
+    total = w_center + w_line
+    if total == 0.0:
+        return err
+
+    delta_center = err * (w_center / total)
+    delta_line = err * (w_line / total)
+
+    if w_center > 0.0:
+        center.x -= nx * delta_center
+        center.y -= ny * delta_center
+
+    if w_line > 0.0:
+        if not a.locked and not b.locked:
+            a.x += nx * delta_line
+            a.y += ny * delta_line
+            b.x += nx * delta_line
+            b.y += ny * delta_line
+        elif not a.locked:
+            a.x += nx * (delta_line * 2.0)
+            a.y += ny * (delta_line * 2.0)
+        elif not b.locked:
+            b.x += nx * (delta_line * 2.0)
+            b.y += ny * (delta_line * 2.0)
+
+    return err
+
+
+def _tangent_error(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: TangentConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    a = points.get(line[0])
+    b = points.get(line[1])
+    center = points.get(c.center)
+    if a is None or b is None or center is None:
+        return 0.0
+
+    radius = c.radius
+    if radius <= 0.0:
+        return 0.0
+
+    vx = b.x - a.x
+    vy = b.y - a.y
+    length = math.hypot(vx, vy)
+    if length < 1e-8:
+        return 0.0
+
+    nx = -vy / length
+    ny = vx / length
+    d = (center.x - a.x) * nx + (center.y - a.y) * ny
+    return abs(d) - radius
 
 
 def _apply_equal_length(

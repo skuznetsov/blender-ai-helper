@@ -135,6 +135,26 @@ class SymmetryConstraint:
 
 
 @dataclass
+class TangentConstraint:
+    id: str
+    line: str
+    circle: str
+    center: str
+    radius: float
+    kind: str = field(init=False, default="tangent")
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "line": self.line,
+            "circle": self.circle,
+            "center": self.center,
+            "radius": self.radius,
+        }
+
+
+@dataclass
 class MidpointConstraint:
     id: str
     line: str
@@ -192,6 +212,7 @@ SketchConstraint = (
     | CoincidentConstraint
     | ConcentricConstraint
     | SymmetryConstraint
+    | TangentConstraint
     | MidpointConstraint
     | EqualLengthConstraint
     | RadiusConstraint
@@ -250,6 +271,14 @@ def constraint_from_dict(data: Dict[str, object]) -> SketchConstraint:
             line=str(data["line"]),
             p1=str(data["p1"]),
             p2=str(data["p2"]),
+        )
+    if kind == "tangent":
+        return TangentConstraint(
+            id=str(data["id"]),
+            line=str(data["line"]),
+            circle=str(data["circle"]),
+            center=str(data["center"]),
+            radius=float(data["radius"]),
         )
     if kind == "midpoint":
         return MidpointConstraint(

@@ -54,6 +54,7 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.operator("aihelper.add_equal_length_constraint", text="Add Equal Length")
         layout.operator("aihelper.add_concentric_constraint", text="Add Concentric")
         layout.operator("aihelper.add_symmetry_constraint", text="Add Symmetry")
+        layout.operator("aihelper.add_tangent_constraint", text="Add Tangent")
         layout.operator("aihelper.add_parallel_constraint", text="Add Parallel")
         layout.operator("aihelper.add_perpendicular_constraint", text="Add Perpendicular")
         layout.operator("aihelper.add_fix_constraint", text="Add Fix")
