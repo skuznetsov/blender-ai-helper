@@ -41,12 +41,16 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Distance labels as text objects.
   - [x] Direct edit on labels (dialog).
   - [~] Angle labels + direct edit (needs Blender validation).
+  - [~] Radius labels + direct edit (needs Blender validation).
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
   - [~] Angle constraint add/edit (needs Blender validation).
+  - [~] Radius constraint add/edit (needs Blender validation).
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
+- [~] Circle tool + radius constraints (needs Blender validation).
+  - DoD: circle can be added and radius constraints solve against it.
 
 ## 5) 3D ops (SAFE)
 - [~] Extrude + Revolve operators (parametric, editable).

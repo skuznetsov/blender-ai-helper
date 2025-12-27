@@ -1,7 +1,8 @@
 import bpy
 from mathutils import Vector
 
-from .constraints import AngleConstraint, DistanceConstraint
+from .circles import load_circles
+from .constraints import AngleConstraint, DistanceConstraint, RadiusConstraint
 
 
 _DIMENSION_KEY = "ai_helper_dimension_id"
@@ -12,7 +13,9 @@ _DIMENSION_PREFIX = "AI_DIM_"
 def update_dimensions(context, sketch_obj, constraints):
     mesh = sketch_obj.data
     collection = sketch_obj.users_collection[0] if sketch_obj.users_collection else context.collection
-    active_ids = {c.id for c in constraints if isinstance(c, (DistanceConstraint, AngleConstraint))}
+    active_ids = {c.id for c in constraints if isinstance(c, (DistanceConstraint, AngleConstraint, RadiusConstraint))}
+    circles = load_circles(sketch_obj)
+    circle_map = {circle.get("id"): circle for circle in circles}
 
     for constraint in constraints:
         if isinstance(constraint, DistanceConstraint):
@@ -57,6 +60,25 @@ def update_dimensions(context, sketch_obj, constraints):
             text_obj.scale = (0.2, 0.2, 0.2)
 
             pos = pv.co + bis * offset
+            world = sketch_obj.matrix_world @ pos
+            text_obj.location = world
+        elif isinstance(constraint, RadiusConstraint):
+            circle = circle_map.get(constraint.entity)
+            if not circle:
+                continue
+            center_id = circle.get("center")
+            if center_id is None:
+                continue
+            try:
+                center = mesh.vertices[int(center_id)].co
+            except (ValueError, IndexError):
+                continue
+
+            text_obj = _ensure_label(constraint.id, constraint.kind, collection)
+            text_obj.data.body = f"R {constraint.radius:.3f}"
+            text_obj.scale = (0.2, 0.2, 0.2)
+
+            pos = center + Vector((constraint.radius, 0.0, 0.0))
             world = sketch_obj.matrix_world @ pos
             text_obj.location = world
 

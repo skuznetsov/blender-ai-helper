@@ -1,6 +1,6 @@
 import bpy
 
-from .sketch.constraints import AngleConstraint, DistanceConstraint
+from .sketch.constraints import AngleConstraint, DistanceConstraint, RadiusConstraint
 from .sketch.store import load_constraints
 
 
@@ -23,6 +23,7 @@ class AIHELPER_PT_main(bpy.types.Panel):
         layout.prop(props, "tool_calls_json", text="Preview")
         layout.separator()
         layout.operator("aihelper.sketch_mode", text="Sketch Mode")
+        layout.operator("aihelper.add_circle", text="Add Circle")
 
 
 class AIHELPER_PT_constraints(bpy.types.Panel):
@@ -47,6 +48,7 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.operator("aihelper.add_horizontal_constraint", text="Add Horizontal")
         layout.operator("aihelper.add_vertical_constraint", text="Add Vertical")
         layout.operator("aihelper.add_angle_constraint", text="Add Angle")
+        layout.operator("aihelper.add_radius_constraint", text="Add Radius")
         layout.operator("aihelper.add_parallel_constraint", text="Add Parallel")
         layout.operator("aihelper.add_perpendicular_constraint", text="Add Perpendicular")
         layout.operator("aihelper.add_fix_constraint", text="Add Fix")
@@ -68,6 +70,9 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
                     op.constraint_id = constraint.id
                 elif isinstance(constraint, AngleConstraint):
                     op = row.operator("aihelper.edit_angle_constraint", text="Edit")
+                    op.constraint_id = constraint.id
+                elif isinstance(constraint, RadiusConstraint):
+                    op = row.operator("aihelper.edit_radius_constraint", text="Edit")
                     op.constraint_id = constraint.id
                 op = row.operator("aihelper.remove_constraint", text="X")
                 op.constraint_id = constraint.id

@@ -4,6 +4,7 @@
 - Entities: points, lines, arcs, circles, polylines.
 - Constraints: distance, angle, horizontal/vertical, parallel/perpendicular, coincident, radius, fix.
 - Solver: PBD/Gauss-Seidel with time budget; supports soft fallback on conflicts.
+- Circles are stored on the sketch mesh as custom metadata; radius constraints expand into per-vertex distance constraints for solving.
 
 ## LLM Flow
 1. Serialize selection summary (units, transforms, counts).

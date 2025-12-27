@@ -6,8 +6,10 @@ from ..sketch.constraints import (
     HorizontalConstraint,
     ParallelConstraint,
     PerpendicularConstraint,
+    RadiusConstraint,
     VerticalConstraint,
 )
+from ..sketch.circles import find_circle_by_vertex, load_circles, update_circle_radius
 from ..sketch.dimensions import (
     clear_dimensions,
     get_dimension_constraint_id,
@@ -59,6 +61,28 @@ def _shared_vertex_for_edges(edges):
 
 def _selected_vertices(obj):
     return [v for v in obj.data.vertices if v.select]
+
+
+def _selected_circle(obj):
+    circles = load_circles(obj)
+    if not circles:
+        return None
+
+    for vert in obj.data.vertices:
+        if not vert.select:
+            continue
+        circle = find_circle_by_vertex(circles, str(vert.index))
+        if circle:
+            return circle
+
+    for edge in obj.data.edges:
+        if not edge.select:
+            continue
+        for vid in edge.vertices:
+            circle = find_circle_by_vertex(circles, str(vid))
+            if circle:
+                return circle
+    return None
 
 
 def _format_diag(diag):
@@ -213,6 +237,67 @@ class AIHELPER_OT_add_angle_constraint(bpy.types.Operator):
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Angle constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_radius_constraint"
+    bl_label = "Add Radius"
+    bl_description = "Add a radius constraint to a circle"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        circle = _selected_circle(obj)
+        if circle is None:
+            self.report({"WARNING"}, "Select a circle vertex or edge")
+            return {"CANCELLED"}
+
+        center_id = circle.get("center")
+        vert_ids = circle.get("verts", [])
+        if center_id is None or not vert_ids:
+            self.report({"WARNING"}, "Circle metadata missing")
+            return {"CANCELLED"}
+
+        try:
+            center = obj.data.vertices[int(center_id)].co
+        except (ValueError, IndexError):
+            self.report({"WARNING"}, "Circle center not found")
+            return {"CANCELLED"}
+
+        radius = float(circle.get("radius", 0.0))
+        if radius <= 0.0:
+            total = 0.0
+            count = 0
+            for vid in vert_ids:
+                try:
+                    vert = obj.data.vertices[int(vid)]
+                except (ValueError, IndexError):
+                    continue
+                total += (vert.co - center).length
+                count += 1
+            if count == 0:
+                self.report({"WARNING"}, "Circle vertices not found")
+                return {"CANCELLED"}
+            radius = total / count
+
+        constraint = RadiusConstraint(
+            id=new_constraint_id(),
+            entity=str(circle["id"]),
+            radius=radius,
+        )
+        append_constraint(obj, constraint)
+        update_circle_radius(obj, constraint.entity, radius)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Radius constraint added")
         return {"FINISHED"}
 
 
@@ -495,6 +580,61 @@ class AIHELPER_OT_edit_angle_constraint(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_edit_radius_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.edit_radius_constraint"
+    bl_label = "Edit Radius"
+    bl_description = "Edit a radius constraint value"
+    bl_options = {"REGISTER", "UNDO"}
+
+    constraint_id: bpy.props.StringProperty()
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Target radius",
+        min=0.0,
+        default=1.0,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        for constraint in constraints:
+            if getattr(constraint, "id", None) == self.constraint_id and isinstance(constraint, RadiusConstraint):
+                self.radius = constraint.radius
+                break
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        def updater(constraint):
+            if isinstance(constraint, RadiusConstraint):
+                update_circle_radius(obj, constraint.entity, self.radius)
+                return RadiusConstraint(
+                    id=constraint.id,
+                    entity=constraint.entity,
+                    radius=self.radius,
+                )
+            return constraint
+
+        if not update_constraint(obj, self.constraint_id, updater):
+            self.report({"WARNING"}, "Constraint not found")
+            return {"CANCELLED"}
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Radius updated")
+        return {"FINISHED"}
+
+
 class AIHELPER_OT_remove_constraint(bpy.types.Operator):
     bl_idname = "aihelper.remove_constraint"
     bl_label = "Remove Constraint"
@@ -539,6 +679,12 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
         max=180.0,
         default=90.0,
     )
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Target radius",
+        min=0.0,
+        default=1.0,
+    )
     constraint_id: bpy.props.StringProperty()
     kind: bpy.props.StringProperty()
 
@@ -546,6 +692,8 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
         layout = self.layout
         if self.kind == "angle":
             layout.prop(self, "degrees")
+        elif self.kind == "radius":
+            layout.prop(self, "radius")
         else:
             layout.prop(self, "distance")
 
@@ -572,6 +720,9 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
                 continue
             if kind == "angle" and isinstance(constraint, AngleConstraint):
                 self.degrees = constraint.degrees
+                break
+            if kind == "radius" and isinstance(constraint, RadiusConstraint):
+                self.radius = constraint.radius
                 break
             if kind == "distance" and isinstance(constraint, DistanceConstraint):
                 self.distance = constraint.distance
@@ -606,6 +757,13 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
                     p2=constraint.p2,
                     degrees=self.degrees,
                 )
+            if self.kind == "radius" and isinstance(constraint, RadiusConstraint):
+                update_circle_radius(obj, constraint.entity, self.radius)
+                return RadiusConstraint(
+                    id=constraint.id,
+                    entity=constraint.entity,
+                    radius=self.radius,
+                )
             if self.kind == "distance" and isinstance(constraint, DistanceConstraint):
                 return DistanceConstraint(
                     id=constraint.id,
@@ -631,6 +789,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_vertical_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_angle_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -638,6 +797,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_clear_constraints)
     bpy.utils.register_class(AIHELPER_OT_edit_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_edit_angle_constraint)
+    bpy.utils.register_class(AIHELPER_OT_edit_radius_constraint)
     bpy.utils.register_class(AIHELPER_OT_remove_constraint)
     bpy.utils.register_class(AIHELPER_OT_update_dimensions)
     bpy.utils.register_class(AIHELPER_OT_clear_dimensions)
@@ -649,6 +809,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_clear_dimensions)
     bpy.utils.unregister_class(AIHELPER_OT_update_dimensions)
     bpy.utils.unregister_class(AIHELPER_OT_remove_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_edit_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_distance_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_clear_constraints)
@@ -658,5 +819,6 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

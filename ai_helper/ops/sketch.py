@@ -3,12 +3,28 @@ import math
 import bpy
 import bmesh
 from bpy_extras import view3d_utils
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 from ..sketch.constraints import HorizontalConstraint, VerticalConstraint
+from ..sketch.circles import append_circle, new_circle_id
 from ..sketch.quadtree import Point2D, Quadtree
 from ..sketch.solver_bridge import solve_mesh
 from ..sketch.store import append_constraint, load_constraints, new_constraint_id
+
+
+def ensure_sketch_object(context):
+    name = "AI_Sketch"
+    obj = context.scene.objects.get(name)
+    if obj is not None:
+        if obj.type != "MESH":
+            return None
+        return obj
+
+    mesh = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, mesh)
+    context.collection.objects.link(obj)
+    return obj
+
 
 class AIHELPER_OT_sketch_mode(bpy.types.Operator):
     bl_idname = "aihelper.sketch_mode"
@@ -315,19 +331,10 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         max_y = max(y1, y2) + 1e-6
         return min_x <= px <= max_x and min_y <= py <= max_y
 
-    def _ensure_sketch_object(self, context):
-        name = "AI_Sketch"
-        obj = context.scene.objects.get(name)
-        if obj:
-            return obj
-
-        mesh = bpy.data.meshes.new(name)
-        obj = bpy.data.objects.new(name, mesh)
-        context.collection.objects.link(obj)
-        return obj
-
     def _add_line(self, context, start, end):
-        obj = self._ensure_sketch_object(context)
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            return None
         bm = bmesh.new()
         bm.from_mesh(obj.data)
 
@@ -344,7 +351,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         return str(edge_index)
 
     def _apply_auto_constraints(self, context, edge_id, start, end):
-        obj = self._ensure_sketch_object(context)
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            return
         dx = end.x - start.x
         dy = end.y - start.y
         if abs(dx) < 1e-8 and abs(dy) < 1e-8:
@@ -365,9 +374,92 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
             solve_mesh(obj, load_constraints(obj))
 
 
+class AIHELPER_OT_add_circle(bpy.types.Operator):
+    bl_idname = "aihelper.add_circle"
+    bl_label = "Add Circle"
+    bl_description = "Add a circle to the sketch mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Circle radius",
+        min=0.0,
+        default=1.0,
+    )
+    segments: bpy.props.IntProperty(
+        name="Segments",
+        description="Circle resolution",
+        min=3,
+        max=256,
+        default=32,
+    )
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="Circle center X",
+        default=0.0,
+    )
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Circle center Y",
+        default=0.0,
+    )
+
+    def invoke(self, context, _event):
+        cursor = context.scene.cursor.location
+        self.center_x = cursor.x
+        self.center_y = cursor.y
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        if self.radius <= 0.0:
+            self.report({"WARNING"}, "Radius must be greater than 0")
+            return {"CANCELLED"}
+
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        matrix = Matrix.Translation((self.center_x, self.center_y, 0.0))
+        result = bmesh.ops.create_circle(
+            bm,
+            cap_ends=False,
+            segments=self.segments,
+            radius=self.radius,
+            matrix=matrix,
+        )
+        center_vert = bm.verts.new((self.center_x, self.center_y, 0.0))
+        bm.verts.ensure_lookup_table()
+        circle_verts = result.get("verts", [])
+        circle_ids = [str(v.index) for v in circle_verts]
+        center_id = str(center_vert.index)
+
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.update()
+
+        circle_id = new_circle_id()
+        append_circle(
+            obj,
+            {
+                "id": circle_id,
+                "center": center_id,
+                "verts": circle_ids,
+                "radius": float(self.radius),
+            },
+        )
+
+        self.report({"INFO"}, "Circle added")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_sketch_mode)
+    bpy.utils.register_class(AIHELPER_OT_add_circle)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_add_circle)
     bpy.utils.unregister_class(AIHELPER_OT_sketch_mode)
