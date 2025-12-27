@@ -49,6 +49,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
   - [~] Angle constraint add/edit (needs Blender validation).
   - [~] Radius constraint add/edit (needs Blender validation).
+  - [~] Coincident constraint add (needs Blender validation).
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
   - [~] Constraint add dialogs prefill current values (needs Blender validation).

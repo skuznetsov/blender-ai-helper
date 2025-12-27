@@ -490,6 +490,38 @@ class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_add_coincident_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_coincident_constraint"
+    bl_label = "Add Coincident"
+    bl_description = "Make two selected vertices coincident"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        verts = _selected_vertices(obj)
+        if len(verts) != 2:
+            self.report({"WARNING"}, "Select 2 vertices")
+            return {"CANCELLED"}
+
+        constraint = CoincidentConstraint(
+            id=new_constraint_id(),
+            p1=str(verts[0].index),
+            p2=str(verts[1].index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Coincident constraint added")
+        return {"FINISHED"}
+
+
 class AIHELPER_OT_add_parallel_constraint(bpy.types.Operator):
     bl_idname = "aihelper.add_parallel_constraint"
     bl_label = "Add Parallel"
@@ -1079,6 +1111,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_vertical_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_radius_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1114,6 +1147,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)
