@@ -16,8 +16,8 @@ except ModuleNotFoundError:
 
 if _IN_BLENDER:
     from . import prefs, props, ui
-    from .ops import constraints, llm, sketch
-    _MODULES = (prefs, props, ui, llm, sketch, constraints)
+    from .ops import constraints, llm, ops_3d, sketch
+    _MODULES = (prefs, props, ui, llm, sketch, constraints, ops_3d)
 else:
     _MODULES = ()
 

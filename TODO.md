@@ -46,10 +46,14 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Auto-constraints on draw (horizontal/vertical).
 
 ## 5) 3D ops (SAFE)
-- [ ] Extrude + Revolve operators (parametric, editable).
+- [~] Extrude + Revolve operators (parametric, editable).
   - DoD: parameters can be adjusted after creation.
-- [ ] Rebuild policy: sketch is source of truth; 3D ops regenerate on change.
+  - [x] Extrude via edge extrusion + stored params.
+  - [x] Revolve via Screw modifier + stored params.
+- [~] Rebuild policy: sketch is source of truth; 3D ops regenerate on change.
   - DoD: changes propagate reliably without corrupting mesh.
+  - [x] Rebuild operator for extrude/revolve.
+  - [ ] Auto-rebuild on sketch edits.
 
 ## 6) LLM integration (SAFE)
 - [x] Selection serializer (compact summary, units, bbox, counts).

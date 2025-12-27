@@ -69,11 +69,28 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
             layout.label(text=props.last_solver_report)
 
 
+class AIHELPER_PT_ops3d(bpy.types.Panel):
+    bl_label = "3D Ops"
+    bl_idname = "AIHELPER_PT_ops3d"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Helper"
+    bl_parent_id = "AIHELPER_PT_main"
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.operator("aihelper.extrude_sketch", text="Extrude Sketch")
+        layout.operator("aihelper.revolve_sketch", text="Revolve Sketch")
+        layout.operator("aihelper.rebuild_3d_ops", text="Rebuild 3D Ops")
+
+
 def register():
     bpy.utils.register_class(AIHELPER_PT_main)
     bpy.utils.register_class(AIHELPER_PT_constraints)
+    bpy.utils.register_class(AIHELPER_PT_ops3d)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_PT_ops3d)
     bpy.utils.unregister_class(AIHELPER_PT_constraints)
     bpy.utils.unregister_class(AIHELPER_PT_main)

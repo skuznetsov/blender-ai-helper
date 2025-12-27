@@ -20,6 +20,7 @@
 - Constraints: select an edge or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Fix.
 - Dimensions: use Update Dimensions to create text labels for distance constraints.
 - Dimension edit: select a label and use Edit Selected Dimension to update the distance.
+- 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 
 ## Notes
 - The LLM adapter defaults to mock mode unless a Grok adapter path is set.

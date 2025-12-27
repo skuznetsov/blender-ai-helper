@@ -19,3 +19,7 @@
 ## Rebuild Policy (planned)
 - Sketch is source of truth for 3D ops.
 - 3D operations regenerate on sketch changes.
+
+## 3D Ops (MVP)
+- Extrude: duplicate sketch mesh and extrude edges along Z.
+- Revolve: Screw modifier around Z axis with angle + steps params.
