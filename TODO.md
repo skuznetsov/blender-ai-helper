@@ -32,7 +32,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 - [~] Sketch Mode modal operator with command bar input.
   - Input formats: `x,y`, `@len<angle`, `dx,dy`.
   - DoD: user can draw line with numeric input.
-- [ ] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
+- [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
 - [ ] Dimension overlay objects (length/angle/radius) with direct edit.
   - DoD: editing a dimension updates geometry via solver.

@@ -5,6 +5,7 @@ import bmesh
 from bpy_extras import view3d_utils
 from mathutils import Vector
 
+from ..sketch.quadtree import Point2D, Quadtree
 
 class AIHELPER_OT_sketch_mode(bpy.types.Operator):
     bl_idname = "aihelper.sketch_mode"
@@ -16,6 +17,13 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.start = None
         self.input_str = ""
         self.relative_mode = True
+        self.snap_enabled = True
+        self.snap_grid = True
+        self.snap_verts = True
+        self.snap_mids = True
+        self.snap_inters = True
+        self.snap_radius = 0.25
+        self.grid_step = 1.0
 
     def invoke(self, context, event):
         if context.area.type != "VIEW_3D":
@@ -157,7 +165,122 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
         t = -origin.z / direction.z
         location = origin + direction * t
-        return Vector((location.x, location.y, 0.0))
+        location = Vector((location.x, location.y, 0.0))
+        return self._snap_location(context, location, event)
+
+    def _snap_location(self, context, location, event):
+        if not self.snap_enabled or event.shift:
+            return location
+
+        snapped = self._snap_to_features(context, location)
+        if snapped is not None:
+            return snapped
+
+        return self._snap_to_grid(context, location)
+
+    def _snap_to_grid(self, context, location):
+        if not self.snap_grid:
+            return location
+
+        step = self._grid_step(context)
+        if step <= 0.0:
+            return location
+
+        x = math.floor(location.x / step + 0.5) * step
+        y = math.floor(location.y / step + 0.5) * step
+        return Vector((x, y, 0.0))
+
+    def _grid_step(self, context):
+        scale = context.scene.unit_settings.scale_length or 1.0
+        return self.grid_step * scale
+
+    def _snap_to_features(self, context, location):
+        points = self._collect_feature_points(context)
+        if not points:
+            return None
+
+        tree = Quadtree.build(points)
+        nearest = tree.query_nearest(Point2D(location.x, location.y), k=1)
+        if not nearest:
+            return None
+
+        radius = self.snap_radius * (context.scene.unit_settings.scale_length or 1.0)
+        candidate = nearest[0]
+        if candidate.distance_to(Point2D(location.x, location.y)) <= radius:
+            return Vector((candidate.x, candidate.y, 0.0))
+
+        return None
+
+    def _collect_feature_points(self, context):
+        obj = context.scene.objects.get("AI_Sketch")
+        if obj is None or obj.type != "MESH":
+            return []
+
+        verts = obj.data.vertices
+        points = []
+        segments = []
+
+        for v in verts:
+            pos = obj.matrix_world @ v.co
+            if self.snap_verts:
+                points.append(Point2D(pos.x, pos.y, payload=("vert", v.index)))
+
+        for edge in obj.data.edges:
+            v1 = verts[edge.vertices[0]]
+            v2 = verts[edge.vertices[1]]
+            p1 = obj.matrix_world @ v1.co
+            p2 = obj.matrix_world @ v2.co
+            segments.append((p1, p2, v1.index, v2.index))
+
+            if self.snap_mids:
+                mid = (p1 + p2) * 0.5
+                points.append(Point2D(mid.x, mid.y, payload=("mid", edge.index)))
+
+        if self.snap_inters and len(segments) > 1:
+            points.extend(self._segment_intersections(segments))
+
+        return points
+
+    def _segment_intersections(self, segments):
+        hits = []
+        count = len(segments)
+        for i in range(count):
+            a1, a2, a_idx1, a_idx2 = segments[i]
+            for j in range(i + 1, count):
+                b1, b2, b_idx1, b_idx2 = segments[j]
+                if a_idx1 in (b_idx1, b_idx2) or a_idx2 in (b_idx1, b_idx2):
+                    continue
+                hit = self._segment_intersection(a1, a2, b1, b2)
+                if hit is not None:
+                    hits.append(Point2D(hit.x, hit.y, payload=("inter", i, j)))
+        return hits
+
+    def _segment_intersection(self, p1, p2, p3, p4):
+        x1, y1 = p1.x, p1.y
+        x2, y2 = p2.x, p2.y
+        x3, y3 = p3.x, p3.y
+        x4, y4 = p4.x, p4.y
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-8:
+            return None
+
+        px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
+        py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom
+
+        if not self._point_on_segment(px, py, x1, y1, x2, y2):
+            return None
+        if not self._point_on_segment(px, py, x3, y3, x4, y4):
+            return None
+
+        return Vector((px, py, 0.0))
+
+    def _point_on_segment(self, px, py, x1, y1, x2, y2):
+        min_x = min(x1, x2) - 1e-6
+        max_x = max(x1, x2) + 1e-6
+        min_y = min(y1, y2) - 1e-6
+        max_y = max(y1, y2) + 1e-6
+        return min_x <= px <= max_x and min_y <= py <= max_y
 
     def _ensure_sketch_object(self, context):
         name = "AI_Sketch"
