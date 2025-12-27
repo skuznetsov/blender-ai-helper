@@ -1,5 +1,6 @@
 import bpy
 
+from .sketch.constraints import DistanceConstraint
 from .sketch.store import load_constraints
 
 
@@ -49,6 +50,20 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.separator()
         layout.operator("aihelper.solve_constraints", text="Solve")
         layout.operator("aihelper.clear_constraints", text="Clear")
+        layout.separator()
+        layout.operator("aihelper.update_dimensions", text="Update Dimensions")
+        layout.operator("aihelper.clear_dimensions", text="Clear Dimensions")
+        if constraints:
+            layout.separator()
+            for constraint in constraints[:10]:
+                row = layout.row(align=True)
+                label = f"{constraint.kind} {constraint.id[:6]}"
+                row.label(text=label)
+                if isinstance(constraint, DistanceConstraint):
+                    op = row.operator("aihelper.edit_distance_constraint", text="Edit")
+                    op.constraint_id = constraint.id
+                op = row.operator("aihelper.remove_constraint", text="X")
+                op.constraint_id = constraint.id
         if props.last_solver_report:
             layout.label(text=props.last_solver_report)
 

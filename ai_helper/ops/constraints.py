@@ -5,8 +5,16 @@ from ..sketch.constraints import (
     HorizontalConstraint,
     VerticalConstraint,
 )
+from ..sketch.dimensions import clear_dimensions, update_distance_dimensions
 from ..sketch.solver_bridge import solve_mesh
-from ..sketch.store import append_constraint, clear_constraints, load_constraints, new_constraint_id
+from ..sketch.store import (
+    append_constraint,
+    clear_constraints,
+    load_constraints,
+    new_constraint_id,
+    remove_constraint,
+    update_constraint,
+)
 
 
 def _get_sketch_object(context):
@@ -205,6 +213,114 @@ class AIHELPER_OT_clear_constraints(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_update_dimensions(bpy.types.Operator):
+    bl_idname = "aihelper.update_dimensions"
+    bl_label = "Update Dimensions"
+    bl_description = "Create or update dimension labels"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        update_distance_dimensions(context, obj, constraints)
+        self.report({"INFO"}, "Dimensions updated")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_clear_dimensions(bpy.types.Operator):
+    bl_idname = "aihelper.clear_dimensions"
+    bl_label = "Clear Dimensions"
+    bl_description = "Remove all dimension labels"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        clear_dimensions(context)
+        self.report({"INFO"}, "Dimensions cleared")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_edit_distance_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.edit_distance_constraint"
+    bl_label = "Edit Distance"
+    bl_description = "Edit a distance constraint value"
+    bl_options = {"REGISTER", "UNDO"}
+
+    constraint_id: bpy.props.StringProperty()
+    distance: bpy.props.FloatProperty(
+        name="Distance",
+        description="Target distance",
+        min=0.0,
+        default=1.0,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        for constraint in constraints:
+            if getattr(constraint, "id", None) == self.constraint_id and isinstance(constraint, DistanceConstraint):
+                self.distance = constraint.distance
+                break
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        def updater(constraint):
+            if isinstance(constraint, DistanceConstraint):
+                return DistanceConstraint(
+                    id=constraint.id,
+                    p1=constraint.p1,
+                    p2=constraint.p2,
+                    distance=self.distance,
+                )
+            return constraint
+
+        if not update_constraint(obj, self.constraint_id, updater):
+            self.report({"WARNING"}, "Constraint not found")
+            return {"CANCELLED"}
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Distance updated")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_remove_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.remove_constraint"
+    bl_label = "Remove Constraint"
+    bl_description = "Remove a constraint"
+    bl_options = {"REGISTER", "UNDO"}
+
+    constraint_id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        if not remove_constraint(obj, self.constraint_id):
+            self.report({"WARNING"}, "Constraint not found")
+            return {"CANCELLED"}
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        self.report({"INFO"}, "Constraint removed")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_add_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_horizontal_constraint)
@@ -212,9 +328,17 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
     bpy.utils.register_class(AIHELPER_OT_solve_constraints)
     bpy.utils.register_class(AIHELPER_OT_clear_constraints)
+    bpy.utils.register_class(AIHELPER_OT_edit_distance_constraint)
+    bpy.utils.register_class(AIHELPER_OT_remove_constraint)
+    bpy.utils.register_class(AIHELPER_OT_update_dimensions)
+    bpy.utils.register_class(AIHELPER_OT_clear_dimensions)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_clear_dimensions)
+    bpy.utils.unregister_class(AIHELPER_OT_update_dimensions)
+    bpy.utils.unregister_class(AIHELPER_OT_remove_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_edit_distance_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_clear_constraints)
     bpy.utils.unregister_class(AIHELPER_OT_solve_constraints)
     bpy.utils.unregister_class(AIHELPER_OT_add_fix_constraint)

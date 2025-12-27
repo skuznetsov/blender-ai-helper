@@ -18,6 +18,7 @@
 - Default mode is REL; press Tab to toggle ABS/REL or prefix `=` for absolute.
 - Polar input: `@len<angle` (degrees).
 - Constraints: select an edge or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Fix.
+- Dimensions: use Update Dimensions to create text labels for distance constraints.
 
 ## Notes
 - The LLM adapter defaults to mock mode unless a Grok adapter path is set.

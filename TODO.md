@@ -36,10 +36,14 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: snap selection is stable and predictable.
 - [x] Constraint storage on sketch mesh + solver bridge.
   - DoD: constraints stored on sketch mesh and solver updates geometry.
-- [ ] Dimension overlay objects (length/angle/radius) with direct edit.
+- [~] Dimension overlay objects (length/angle/radius) with direct edit.
   - DoD: editing a dimension updates geometry via solver.
+  - [x] Distance labels as text objects.
+  - [ ] Direct edit on labels (type-to-edit or dialog).
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
+  - [x] Manual add/edit/remove for distance/h/v/fix via panel.
+  - [ ] Auto-constraints on draw.
 
 ## 5) 3D ops (SAFE)
 - [ ] Extrude + Revolve operators (parametric, editable).

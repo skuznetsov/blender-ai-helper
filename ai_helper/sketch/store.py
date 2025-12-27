@@ -46,3 +46,25 @@ def append_constraint(obj, constraint: SketchConstraint) -> None:
 def clear_constraints(obj) -> None:
     if _CONSTRAINTS_KEY in obj:
         del obj[_CONSTRAINTS_KEY]
+
+
+def update_constraint(obj, constraint_id: str, updater) -> bool:
+    constraints = load_constraints(obj)
+    updated = False
+    for idx, constraint in enumerate(constraints):
+        if getattr(constraint, "id", None) == constraint_id:
+            constraints[idx] = updater(constraint)
+            updated = True
+            break
+    if updated:
+        save_constraints(obj, constraints)
+    return updated
+
+
+def remove_constraint(obj, constraint_id: str) -> bool:
+    constraints = load_constraints(obj)
+    filtered = [c for c in constraints if getattr(c, "id", None) != constraint_id]
+    if len(filtered) == len(constraints):
+        return False
+    save_constraints(obj, filtered)
+    return True
