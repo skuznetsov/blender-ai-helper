@@ -17,6 +17,11 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Last solver summary",
         default="",
     )
+    auto_rebuild: bpy.props.BoolProperty(
+        name="Auto Rebuild 3D Ops",
+        description="Automatically rebuild 3D ops when sketch updates",
+        default=True,
+    )
 
 
 def register():

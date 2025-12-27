@@ -19,6 +19,7 @@
 ## Rebuild Policy (planned)
 - Sketch is source of truth for 3D ops.
 - 3D operations regenerate on sketch changes.
+  - Auto rebuild uses depsgraph handler and can be disabled via UI.
 
 ## 3D Ops (MVP)
 - Extrude: duplicate sketch mesh and extrude edges along Z.

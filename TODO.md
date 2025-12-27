@@ -53,7 +53,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 - [~] Rebuild policy: sketch is source of truth; 3D ops regenerate on change.
   - DoD: changes propagate reliably without corrupting mesh.
   - [x] Rebuild operator for extrude/revolve.
-  - [ ] Auto-rebuild on sketch edits.
+  - [~] Auto-rebuild on sketch edits (handler implemented; needs Blender validation).
 
 ## 6) LLM integration (SAFE)
 - [x] Selection serializer (compact summary, units, bbox, counts).

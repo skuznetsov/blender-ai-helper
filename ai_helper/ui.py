@@ -77,8 +77,10 @@ class AIHELPER_PT_ops3d(bpy.types.Panel):
     bl_category = "AI Helper"
     bl_parent_id = "AIHELPER_PT_main"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
+        props = context.scene.ai_helper
+        layout.prop(props, "auto_rebuild")
         layout.operator("aihelper.extrude_sketch", text="Extrude Sketch")
         layout.operator("aihelper.revolve_sketch", text="Revolve Sketch")
         layout.operator("aihelper.rebuild_3d_ops", text="Rebuild 3D Ops")

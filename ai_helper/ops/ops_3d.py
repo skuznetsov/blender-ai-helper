@@ -128,35 +128,54 @@ class AIHELPER_OT_rebuild_3d_ops(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        rebuilt = 0
-        for obj in context.scene.objects:
-            op = obj.get("ai_helper_op")
-            source_name = obj.get("ai_helper_source")
-            if not op or not source_name:
-                continue
-
-            source = context.scene.objects.get(source_name)
-            if source is None:
-                continue
-
-            if op == "extrude":
-                distance = float(obj.get("ai_helper_extrude_distance", 1.0))
-                mesh = _extrude_mesh_from_source(source, distance)
-                if mesh is None:
-                    continue
-                _replace_mesh(obj, mesh)
-                rebuilt += 1
-            elif op == "revolve":
-                angle = float(obj.get("ai_helper_revolve_angle", 360.0))
-                steps = int(obj.get("ai_helper_revolve_steps", 32))
-                if obj.modifiers.get("AI_Revolve"):
-                    mod = obj.modifiers["AI_Revolve"]
-                    mod.angle = math.radians(angle)
-                    mod.steps = steps
-                rebuilt += 1
-
+        rebuilt = rebuild_ops(context.scene)
         self.report({"INFO"}, f"Rebuilt {rebuilt} objects")
         return {"FINISHED"}
+
+
+def has_ops(scene, source_name: str | None = None) -> bool:
+    for obj in scene.objects:
+        if obj.get("ai_helper_op") and obj.get("ai_helper_source"):
+            if source_name is None or obj.get("ai_helper_source") == source_name:
+                return True
+    return False
+
+
+def rebuild_ops(scene):
+    rebuilt = 0
+    for obj in scene.objects:
+        op = obj.get("ai_helper_op")
+        source_name = obj.get("ai_helper_source")
+        if not op or not source_name:
+            continue
+
+        source = scene.objects.get(source_name)
+        if source is None:
+            continue
+
+        if op == "extrude":
+            distance = float(obj.get("ai_helper_extrude_distance", 1.0))
+            mesh = _extrude_mesh_from_source(source, distance)
+            if mesh is None:
+                continue
+            _replace_mesh(obj, mesh)
+            rebuilt += 1
+        elif op == "revolve":
+            angle = float(obj.get("ai_helper_revolve_angle", 360.0))
+            steps = int(obj.get("ai_helper_revolve_steps", 32))
+            new_mesh = source.data.copy()
+            _replace_mesh(obj, new_mesh)
+            mod = obj.modifiers.get("AI_Revolve")
+            if mod is None:
+                mod = obj.modifiers.new(name="AI_Revolve", type="SCREW")
+                mod.axis = "Z"
+                mod.use_merge_vertices = True
+                mod.merge_threshold = 0.001
+            mod.angle = math.radians(angle)
+            mod.steps = steps
+            rebuilt += 1
+
+    return rebuilt
 
 
 def register():
