@@ -13,7 +13,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 ## 1) Sketch data model (SAFE)
 - [x] Data structures for sketch entities (Point, Line, Arc, Circle, Polyline).
   - DoD: unit tests or demo script that creates entities and serializes them.
-- [x] Constraint objects (Distance, Angle, H/V, Parallel, Perpendicular, Coincident, Radius, Fix).
+- [x] Constraint objects (Distance, Angle, H/V, Parallel, Perpendicular, Coincident, Radius, Midpoint, Equal Length, Concentric, Symmetry, Tangent, Fix).
   - DoD: constraints can be created/serialized and validated.
 
 ## 2) Solver MVP (SAFE)
@@ -96,7 +96,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: explains rebuild and conflict policy.
 
 ## Ideas backlog
-- Full constraint set (Fusion-like): tangent, equal, symmetry, midpoint, concentric.
+- Constraint set parity (Fusion-like): tangent, equal, symmetry, midpoint, concentric implemented; needs Blender validation.
 - Constraint diagnostics UI (highlight conflicting entities).
 - History timeline for sketch edits.
 - Parametric constraints on 3D ops (draft, shell, fillet).
