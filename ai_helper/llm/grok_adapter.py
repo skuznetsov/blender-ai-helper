@@ -84,7 +84,7 @@ class GrokAdapter:
         return _parse_tool_calls(data)
 
     def _mock_tool_calls(self, prompt: str) -> List[ToolCall]:
-        logger.logger.info("Mock Grok response for prompt: %s", prompt)
+        logger.logger.info("Mock Grok response for prompt length: %d", len(prompt))
         return [
             ToolCall(
                 name="transform_object",
