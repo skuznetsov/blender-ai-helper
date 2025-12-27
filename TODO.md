@@ -34,9 +34,11 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: user can draw line with numeric input.
 - [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
+- [x] Constraint storage on sketch mesh + solver bridge.
+  - DoD: constraints stored on sketch mesh and solver updates geometry.
 - [ ] Dimension overlay objects (length/angle/radius) with direct edit.
   - DoD: editing a dimension updates geometry via solver.
-- [ ] Constraint UI (toggle per entity + auto-constraints on draw).
+- [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
 
 ## 5) 3D ops (SAFE)

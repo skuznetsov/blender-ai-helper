@@ -1,5 +1,7 @@
 import bpy
 
+from .sketch.store import load_constraints
+
 
 class AIHELPER_PT_main(bpy.types.Panel):
     bl_label = "AI Helper"
@@ -22,9 +24,40 @@ class AIHELPER_PT_main(bpy.types.Panel):
         layout.operator("aihelper.sketch_mode", text="Sketch Mode")
 
 
+class AIHELPER_PT_constraints(bpy.types.Panel):
+    bl_label = "Constraints"
+    bl_idname = "AIHELPER_PT_constraints"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Helper"
+    bl_parent_id = "AIHELPER_PT_main"
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.ai_helper
+        obj = context.scene.objects.get("AI_Sketch")
+        if obj is None or obj.type != "MESH":
+            layout.label(text="No sketch mesh found")
+            return
+
+        constraints = load_constraints(obj)
+        layout.label(text=f"Constraints: {len(constraints)}")
+        layout.operator("aihelper.add_distance_constraint", text="Add Distance")
+        layout.operator("aihelper.add_horizontal_constraint", text="Add Horizontal")
+        layout.operator("aihelper.add_vertical_constraint", text="Add Vertical")
+        layout.operator("aihelper.add_fix_constraint", text="Add Fix")
+        layout.separator()
+        layout.operator("aihelper.solve_constraints", text="Solve")
+        layout.operator("aihelper.clear_constraints", text="Clear")
+        if props.last_solver_report:
+            layout.label(text=props.last_solver_report)
+
+
 def register():
     bpy.utils.register_class(AIHELPER_PT_main)
+    bpy.utils.register_class(AIHELPER_PT_constraints)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_PT_constraints)
     bpy.utils.unregister_class(AIHELPER_PT_main)
