@@ -43,6 +43,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
+  - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
 
 ## 5) 3D ops (SAFE)

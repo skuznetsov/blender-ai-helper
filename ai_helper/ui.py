@@ -46,6 +46,8 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.operator("aihelper.add_distance_constraint", text="Add Distance")
         layout.operator("aihelper.add_horizontal_constraint", text="Add Horizontal")
         layout.operator("aihelper.add_vertical_constraint", text="Add Vertical")
+        layout.operator("aihelper.add_parallel_constraint", text="Add Parallel")
+        layout.operator("aihelper.add_perpendicular_constraint", text="Add Perpendicular")
         layout.operator("aihelper.add_fix_constraint", text="Add Fix")
         layout.separator()
         layout.operator("aihelper.solve_constraints", text="Solve")

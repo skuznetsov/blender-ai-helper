@@ -3,6 +3,8 @@ from ..sketch.constraints import (
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
+    ParallelConstraint,
+    PerpendicularConstraint,
     VerticalConstraint,
 )
 from ..sketch.dimensions import clear_dimensions, get_dimension_constraint_id, update_distance_dimensions
@@ -29,6 +31,10 @@ def _selected_edge(obj):
         if edge.select:
             return edge
     return None
+
+
+def _selected_edges(obj):
+    return [edge for edge in obj.data.edges if edge.select]
 
 
 def _selected_vertices(obj):
@@ -143,6 +149,70 @@ class AIHELPER_OT_add_vertical_constraint(bpy.types.Operator):
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Vertical constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_parallel_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_parallel_constraint"
+    bl_label = "Add Parallel"
+    bl_description = "Add a parallel constraint to two selected edges"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        if len(edges) != 2:
+            self.report({"WARNING"}, "Select 2 edges")
+            return {"CANCELLED"}
+
+        constraint = ParallelConstraint(
+            id=new_constraint_id(),
+            line_a=str(edges[0].index),
+            line_b=str(edges[1].index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_distance_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Parallel constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_perpendicular_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_perpendicular_constraint"
+    bl_label = "Add Perpendicular"
+    bl_description = "Add a perpendicular constraint to two selected edges"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        if len(edges) != 2:
+            self.report({"WARNING"}, "Select 2 edges")
+            return {"CANCELLED"}
+
+        constraint = PerpendicularConstraint(
+            id=new_constraint_id(),
+            line_a=str(edges[0].index),
+            line_b=str(edges[1].index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_distance_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Perpendicular constraint added")
         return {"FINISHED"}
 
 
@@ -407,6 +477,8 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_vertical_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
     bpy.utils.register_class(AIHELPER_OT_solve_constraints)
     bpy.utils.register_class(AIHELPER_OT_clear_constraints)
@@ -428,4 +500,6 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_fix_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_vertical_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_horizontal_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_perpendicular_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

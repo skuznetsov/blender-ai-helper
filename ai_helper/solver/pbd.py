@@ -11,7 +11,9 @@ from ..sketch.constraints import (
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
+    ParallelConstraint,
     SketchConstraint,
+    PerpendicularConstraint,
     VerticalConstraint,
 )
 
@@ -86,6 +88,10 @@ def solve(
                 err = _apply_vertical(points, line_map, constraint)
             elif isinstance(constraint, AngleConstraint):
                 err = _apply_angle(points, constraint)
+            elif isinstance(constraint, ParallelConstraint):
+                err = _apply_parallel(points, line_map, constraint)
+            elif isinstance(constraint, PerpendicularConstraint):
+                err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -162,6 +168,10 @@ def solve(
                 err = _apply_vertical(points, line_map, constraint)
             elif isinstance(constraint, AngleConstraint):
                 err = _apply_angle(points, constraint)
+            elif isinstance(constraint, ParallelConstraint):
+                err = _apply_parallel(points, line_map, constraint)
+            elif isinstance(constraint, PerpendicularConstraint):
+                err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -425,6 +435,10 @@ def _constraint_error(
         return p2.x - p1.x
     if isinstance(constraint, AngleConstraint):
         return _angle_error(points, constraint)
+    if isinstance(constraint, ParallelConstraint):
+        return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=0.0)
+    if isinstance(constraint, PerpendicularConstraint):
+        return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=90.0)
     if isinstance(constraint, FixConstraint):
         return 0.0
     return 0.0
@@ -463,3 +477,126 @@ def _angle_error(points: Dict[str, PointState], c: AngleConstraint) -> float:
     current = math.atan2(cross, dot)
     target = math.radians(c.degrees)
     return abs(current) - abs(target)
+
+
+def _apply_parallel(points: Dict[str, PointState], line_map: Dict[str, Tuple[str, str]], c: ParallelConstraint) -> float:
+    return _apply_line_angle(points, line_map, c.line_a, c.line_b, target_degrees=0.0)
+
+
+def _apply_perpendicular(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: PerpendicularConstraint,
+) -> float:
+    return _apply_line_angle(points, line_map, c.line_a, c.line_b, target_degrees=90.0)
+
+
+def _apply_line_angle(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    line_a: str,
+    line_b: str,
+    target_degrees: float,
+) -> float:
+    a = line_map.get(line_a)
+    b = line_map.get(line_b)
+    if not a or not b:
+        return 0.0
+
+    va = _line_vector(points, a[0], a[1])
+    vb = _line_vector(points, b[0], b[1])
+    if va is None or vb is None:
+        return 0.0
+
+    angle = _signed_angle(va, vb)
+    target = math.radians(target_degrees)
+    delta = _wrap_period(angle - target, math.pi)
+    if abs(delta) < 1e-8:
+        return 0.0
+
+    a_free = _line_free_count(points, a[0], a[1])
+    b_free = _line_free_count(points, b[0], b[1])
+
+    if a_free == 0 and b_free == 0:
+        return delta
+    if a_free == 0:
+        _rotate_line(points, b[0], b[1], -delta)
+    elif b_free == 0:
+        _rotate_line(points, a[0], a[1], delta)
+    else:
+        _rotate_line(points, a[0], a[1], delta / 2.0)
+        _rotate_line(points, b[0], b[1], -delta / 2.0)
+
+    return delta
+
+
+def _line_vector(points: Dict[str, PointState], p1_id: str, p2_id: str):
+    p1 = points.get(p1_id)
+    p2 = points.get(p2_id)
+    if p1 is None or p2 is None:
+        return None
+    return (p2.x - p1.x, p2.y - p1.y)
+
+
+def _line_free_count(points: Dict[str, PointState], p1_id: str, p2_id: str) -> int:
+    p1 = points.get(p1_id)
+    p2 = points.get(p2_id)
+    if p1 is None or p2 is None:
+        return 0
+    locked = int(p1.locked) + int(p2.locked)
+    return 2 - locked
+
+
+def _signed_angle(v1, v2) -> float:
+    v1x, v1y = v1
+    v2x, v2y = v2
+    dot = v1x * v2x + v1y * v2y
+    cross = v1x * v2y - v1y * v2x
+    return math.atan2(cross, dot)
+
+
+def _wrap_period(value: float, period: float) -> float:
+    return (value + period / 2.0) % period - period / 2.0
+
+
+def _rotate_line(points: Dict[str, PointState], p1_id: str, p2_id: str, angle: float) -> None:
+    p1 = points.get(p1_id)
+    p2 = points.get(p2_id)
+    if p1 is None or p2 is None:
+        return
+
+    if p1.locked and p2.locked:
+        return
+
+    if p1.locked and not p2.locked:
+        _rotate_around(p2, p1, -angle)
+        return
+    if p2.locked and not p1.locked:
+        _rotate_around(p1, p2, angle)
+        return
+
+    center = PointState((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0)
+    _rotate_around(p1, center, angle)
+    _rotate_around(p2, center, angle)
+
+
+def _line_angle_error(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    line_a: str,
+    line_b: str,
+    target_degrees: float,
+) -> float:
+    a = line_map.get(line_a)
+    b = line_map.get(line_b)
+    if not a or not b:
+        return 0.0
+
+    va = _line_vector(points, a[0], a[1])
+    vb = _line_vector(points, b[0], b[1])
+    if va is None or vb is None:
+        return 0.0
+
+    angle = _signed_angle(va, vb)
+    target = math.radians(target_degrees)
+    return _wrap_period(angle - target, math.pi)
