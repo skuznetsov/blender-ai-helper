@@ -18,9 +18,10 @@
 - Default mode is REL; press Tab to toggle ABS/REL or prefix `=` for absolute.
 - Polar input: `@len<angle` (degrees).
 - Press A to toggle auto constraints; press S to toggle snapping; hold Shift to temporarily disable snapping.
-- Constraints: select an edge or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Parallel/Perpendicular/Fix.
-- Dimensions: use Update Dimensions to create text labels for distance constraints.
-- Dimension edit: select a label and use Edit Selected Dimension to update the distance.
+- Constraints: select edges or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Angle/Parallel/Perpendicular/Fix.
+- Angle constraints: select two connected edges and set the target angle.
+- Dimensions: use Update Dimensions to create text labels for distance and angle constraints.
+- Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 - Auto rebuild: toggle Auto Rebuild 3D Ops in the 3D Ops panel.
 

@@ -1,5 +1,6 @@
 import bpy
 from ..sketch.constraints import (
+    AngleConstraint,
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
@@ -7,7 +8,12 @@ from ..sketch.constraints import (
     PerpendicularConstraint,
     VerticalConstraint,
 )
-from ..sketch.dimensions import clear_dimensions, get_dimension_constraint_id, update_distance_dimensions
+from ..sketch.dimensions import (
+    clear_dimensions,
+    get_dimension_constraint_id,
+    get_dimension_kind,
+    update_dimensions,
+)
 from ..sketch.solver_bridge import solve_mesh
 from ..sketch.store import (
     append_constraint,
@@ -35,6 +41,20 @@ def _selected_edge(obj):
 
 def _selected_edges(obj):
     return [edge for edge in obj.data.edges if edge.select]
+
+
+def _shared_vertex_for_edges(edges):
+    if len(edges) != 2:
+        return None
+    verts_a = set(edges[0].vertices)
+    verts_b = set(edges[1].vertices)
+    shared = verts_a & verts_b
+    if not shared:
+        return None
+    vertex = shared.pop()
+    other_a = (verts_a - {vertex}).pop()
+    other_b = (verts_b - {vertex}).pop()
+    return other_a, vertex, other_b
 
 
 def _selected_vertices(obj):
@@ -89,7 +109,7 @@ class AIHELPER_OT_add_distance_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Distance constraint added")
@@ -117,7 +137,7 @@ class AIHELPER_OT_add_horizontal_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Horizontal constraint added")
@@ -145,10 +165,54 @@ class AIHELPER_OT_add_vertical_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Vertical constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_angle_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_angle_constraint"
+    bl_label = "Add Angle"
+    bl_description = "Add an angle constraint between two connected edges"
+    bl_options = {"REGISTER", "UNDO"}
+
+    degrees: bpy.props.FloatProperty(
+        name="Angle",
+        description="Target angle in degrees",
+        default=90.0,
+        min=0.0,
+        max=180.0,
+    )
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        shared = _shared_vertex_for_edges(edges)
+        if shared is None:
+            self.report({"WARNING"}, "Select 2 edges sharing a vertex")
+            return {"CANCELLED"}
+
+        p1, vertex, p2 = shared
+        constraint = AngleConstraint(
+            id=new_constraint_id(),
+            p1=str(p1),
+            vertex=str(vertex),
+            p2=str(p2),
+            degrees=self.degrees,
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Angle constraint added")
         return {"FINISHED"}
 
 
@@ -177,7 +241,7 @@ class AIHELPER_OT_add_parallel_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Parallel constraint added")
@@ -209,7 +273,7 @@ class AIHELPER_OT_add_perpendicular_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Perpendicular constraint added")
@@ -238,7 +302,7 @@ class AIHELPER_OT_add_fix_constraint(bpy.types.Operator):
         append_constraint(obj, constraint)
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Fix constraint added")
@@ -263,7 +327,7 @@ class AIHELPER_OT_solve_constraints(bpy.types.Operator):
             return {"CANCELLED"}
 
         diag = solve_mesh(obj, constraints)
-        update_distance_dimensions(context, obj, constraints)
+        update_dimensions(context, obj, constraints)
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Constraints solved")
@@ -302,7 +366,7 @@ class AIHELPER_OT_update_dimensions(bpy.types.Operator):
             return {"CANCELLED"}
 
         constraints = load_constraints(obj)
-        update_distance_dimensions(context, obj, constraints)
+        update_dimensions(context, obj, constraints)
         self.report({"INFO"}, "Dimensions updated")
         return {"FINISHED"}
 
@@ -367,10 +431,67 @@ class AIHELPER_OT_edit_distance_constraint(bpy.types.Operator):
             return {"CANCELLED"}
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
 
         self.report({"INFO"}, "Distance updated")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_edit_angle_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.edit_angle_constraint"
+    bl_label = "Edit Angle"
+    bl_description = "Edit an angle constraint value"
+    bl_options = {"REGISTER", "UNDO"}
+
+    constraint_id: bpy.props.StringProperty()
+    degrees: bpy.props.FloatProperty(
+        name="Angle",
+        description="Target angle in degrees",
+        min=0.0,
+        max=180.0,
+        default=90.0,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        for constraint in constraints:
+            if getattr(constraint, "id", None) == self.constraint_id and isinstance(constraint, AngleConstraint):
+                self.degrees = constraint.degrees
+                break
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        def updater(constraint):
+            if isinstance(constraint, AngleConstraint):
+                return AngleConstraint(
+                    id=constraint.id,
+                    p1=constraint.p1,
+                    vertex=constraint.vertex,
+                    p2=constraint.p2,
+                    degrees=self.degrees,
+                )
+            return constraint
+
+        if not update_constraint(obj, self.constraint_id, updater):
+            self.report({"WARNING"}, "Constraint not found")
+            return {"CANCELLED"}
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+
+        self.report({"INFO"}, "Angle updated")
         return {"FINISHED"}
 
 
@@ -393,7 +514,7 @@ class AIHELPER_OT_remove_constraint(bpy.types.Operator):
             return {"CANCELLED"}
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
         self.report({"INFO"}, "Constraint removed")
         return {"FINISHED"}
@@ -402,7 +523,7 @@ class AIHELPER_OT_remove_constraint(bpy.types.Operator):
 class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
     bl_idname = "aihelper.edit_selected_dimension"
     bl_label = "Edit Selected Dimension"
-    bl_description = "Edit the distance constraint for the selected label"
+    bl_description = "Edit the constraint value for the selected label"
     bl_options = {"REGISTER", "UNDO"}
 
     distance: bpy.props.FloatProperty(
@@ -411,7 +532,22 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
         min=0.0,
         default=1.0,
     )
+    degrees: bpy.props.FloatProperty(
+        name="Angle",
+        description="Target angle in degrees",
+        min=0.0,
+        max=180.0,
+        default=90.0,
+    )
     constraint_id: bpy.props.StringProperty()
+    kind: bpy.props.StringProperty()
+
+    def draw(self, _context):
+        layout = self.layout
+        if self.kind == "angle":
+            layout.prop(self, "degrees")
+        else:
+            layout.prop(self, "distance")
 
     def invoke(self, context, _event):
         obj = _get_sketch_object(context)
@@ -429,9 +565,15 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
             self.report({"WARNING"}, "Active object is not a dimension label")
             return {"CANCELLED"}
 
+        kind = get_dimension_kind(label) or "distance"
         constraints = load_constraints(obj)
         for constraint in constraints:
-            if getattr(constraint, "id", None) == constraint_id and isinstance(constraint, DistanceConstraint):
+            if getattr(constraint, "id", None) != constraint_id:
+                continue
+            if kind == "angle" and isinstance(constraint, AngleConstraint):
+                self.degrees = constraint.degrees
+                break
+            if kind == "distance" and isinstance(constraint, DistanceConstraint):
                 self.distance = constraint.distance
                 break
         else:
@@ -439,6 +581,7 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
             return {"CANCELLED"}
 
         self.constraint_id = constraint_id
+        self.kind = kind
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -453,7 +596,17 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
             return {"CANCELLED"}
 
         def updater(constraint):
-            if isinstance(constraint, DistanceConstraint) and constraint.id == constraint_id:
+            if constraint.id != constraint_id:
+                return constraint
+            if self.kind == "angle" and isinstance(constraint, AngleConstraint):
+                return AngleConstraint(
+                    id=constraint.id,
+                    p1=constraint.p1,
+                    vertex=constraint.vertex,
+                    p2=constraint.p2,
+                    degrees=self.degrees,
+                )
+            if self.kind == "distance" and isinstance(constraint, DistanceConstraint):
                 return DistanceConstraint(
                     id=constraint.id,
                     p1=constraint.p1,
@@ -467,7 +620,7 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
             return {"CANCELLED"}
 
         diag = solve_mesh(obj, load_constraints(obj))
-        update_distance_dimensions(context, obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
         context.scene.ai_helper.last_solver_report = _format_diag(diag)
         self.report({"INFO"}, "Dimension updated")
         return {"FINISHED"}
@@ -477,12 +630,14 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_vertical_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
     bpy.utils.register_class(AIHELPER_OT_solve_constraints)
     bpy.utils.register_class(AIHELPER_OT_clear_constraints)
     bpy.utils.register_class(AIHELPER_OT_edit_distance_constraint)
+    bpy.utils.register_class(AIHELPER_OT_edit_angle_constraint)
     bpy.utils.register_class(AIHELPER_OT_remove_constraint)
     bpy.utils.register_class(AIHELPER_OT_update_dimensions)
     bpy.utils.register_class(AIHELPER_OT_clear_dimensions)
@@ -494,6 +649,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_clear_dimensions)
     bpy.utils.unregister_class(AIHELPER_OT_update_dimensions)
     bpy.utils.unregister_class(AIHELPER_OT_remove_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_edit_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_distance_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_clear_constraints)
     bpy.utils.unregister_class(AIHELPER_OT_solve_constraints)
@@ -502,4 +658,5 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

@@ -1,6 +1,6 @@
 import bpy
 
-from .sketch.constraints import DistanceConstraint
+from .sketch.constraints import AngleConstraint, DistanceConstraint
 from .sketch.store import load_constraints
 
 
@@ -46,6 +46,7 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.operator("aihelper.add_distance_constraint", text="Add Distance")
         layout.operator("aihelper.add_horizontal_constraint", text="Add Horizontal")
         layout.operator("aihelper.add_vertical_constraint", text="Add Vertical")
+        layout.operator("aihelper.add_angle_constraint", text="Add Angle")
         layout.operator("aihelper.add_parallel_constraint", text="Add Parallel")
         layout.operator("aihelper.add_perpendicular_constraint", text="Add Perpendicular")
         layout.operator("aihelper.add_fix_constraint", text="Add Fix")
@@ -64,6 +65,9 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
                 row.label(text=label)
                 if isinstance(constraint, DistanceConstraint):
                     op = row.operator("aihelper.edit_distance_constraint", text="Edit")
+                    op.constraint_id = constraint.id
+                elif isinstance(constraint, AngleConstraint):
+                    op = row.operator("aihelper.edit_angle_constraint", text="Edit")
                     op.constraint_id = constraint.id
                 op = row.operator("aihelper.remove_constraint", text="X")
                 op.constraint_id = constraint.id

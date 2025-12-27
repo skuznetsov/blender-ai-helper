@@ -40,9 +40,11 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: editing a dimension updates geometry via solver.
   - [x] Distance labels as text objects.
   - [x] Direct edit on labels (dialog).
+  - [~] Angle labels + direct edit (needs Blender validation).
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
+  - [~] Angle constraint add/edit (needs Blender validation).
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
 
