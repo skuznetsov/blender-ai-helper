@@ -38,6 +38,16 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.start = None
         self.input_str = ""
         self.relative_mode = True
+        props = context.scene.ai_helper
+        self.auto_constraints = props.auto_constraints
+        self.hv_tolerance_deg = props.hv_tolerance_deg
+        self.snap_enabled = props.snap_enabled
+        self.snap_grid = props.snap_grid
+        self.snap_verts = props.snap_verts
+        self.snap_mids = props.snap_mids
+        self.snap_inters = props.snap_inters
+        self.snap_radius = props.snap_radius
+        self.grid_step = props.grid_step
         context.window_manager.modal_handler_add(self)
         self._set_header(context)
         return {"RUNNING_MODAL"}
@@ -54,6 +64,13 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
         if event.type == "A" and event.value == "PRESS":
             self.auto_constraints = not self.auto_constraints
+            context.scene.ai_helper.auto_constraints = self.auto_constraints
+            self._set_header(context)
+            return {"RUNNING_MODAL"}
+
+        if event.type == "S" and event.value == "PRESS":
+            self.snap_enabled = not self.snap_enabled
+            context.scene.ai_helper.snap_enabled = self.snap_enabled
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -109,8 +126,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
     def _set_header(self, context):
         mode = "REL" if self.relative_mode else "ABS"
         auto = "AUTO" if self.auto_constraints else "MANUAL"
+        snap = "SNAP" if self.snap_enabled else "FREE"
         text = self.input_str if self.input_str else "<input>"
-        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {text}")
+        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {snap} | {text}")
 
     def _clear_header(self, context):
         context.area.header_text_set(None)

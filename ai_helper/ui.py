@@ -86,13 +86,40 @@ class AIHELPER_PT_ops3d(bpy.types.Panel):
         layout.operator("aihelper.rebuild_3d_ops", text="Rebuild 3D Ops")
 
 
+class AIHELPER_PT_sketch(bpy.types.Panel):
+    bl_label = "Sketch Settings"
+    bl_idname = "AIHELPER_PT_sketch"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Helper"
+    bl_parent_id = "AIHELPER_PT_main"
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.ai_helper
+        layout.prop(props, "auto_constraints")
+        layout.prop(props, "hv_tolerance_deg")
+        layout.separator()
+        layout.prop(props, "snap_enabled")
+        col = layout.column()
+        col.enabled = props.snap_enabled
+        col.prop(props, "snap_grid")
+        col.prop(props, "snap_verts")
+        col.prop(props, "snap_mids")
+        col.prop(props, "snap_inters")
+        col.prop(props, "snap_radius")
+        col.prop(props, "grid_step")
+
+
 def register():
     bpy.utils.register_class(AIHELPER_PT_main)
     bpy.utils.register_class(AIHELPER_PT_constraints)
     bpy.utils.register_class(AIHELPER_PT_ops3d)
+    bpy.utils.register_class(AIHELPER_PT_sketch)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_PT_sketch)
     bpy.utils.unregister_class(AIHELPER_PT_ops3d)
     bpy.utils.unregister_class(AIHELPER_PT_constraints)
     bpy.utils.unregister_class(AIHELPER_PT_main)

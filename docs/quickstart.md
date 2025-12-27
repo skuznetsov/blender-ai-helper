@@ -17,6 +17,7 @@
 - Click to set a start point, then type `x,y` and press Enter.
 - Default mode is REL; press Tab to toggle ABS/REL or prefix `=` for absolute.
 - Polar input: `@len<angle` (degrees).
+- Press A to toggle auto constraints; press S to toggle snapping; hold Shift to temporarily disable snapping.
 - Constraints: select an edge or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Fix.
 - Dimensions: use Update Dimensions to create text labels for distance constraints.
 - Dimension edit: select a label and use Edit Selected Dimension to update the distance.

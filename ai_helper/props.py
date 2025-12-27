@@ -22,6 +22,55 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Automatically rebuild 3D ops when sketch updates",
         default=True,
     )
+    auto_constraints: bpy.props.BoolProperty(
+        name="Auto Constraints",
+        description="Auto-apply horizontal/vertical constraints when drawing",
+        default=True,
+    )
+    hv_tolerance_deg: bpy.props.FloatProperty(
+        name="HV Tolerance",
+        description="Angle tolerance in degrees for auto H/V constraints",
+        default=8.0,
+        min=0.1,
+        max=45.0,
+    )
+    snap_enabled: bpy.props.BoolProperty(
+        name="Snap Enabled",
+        description="Enable snapping while drawing",
+        default=True,
+    )
+    snap_grid: bpy.props.BoolProperty(
+        name="Snap Grid",
+        description="Snap to grid points",
+        default=True,
+    )
+    snap_verts: bpy.props.BoolProperty(
+        name="Snap Vertices",
+        description="Snap to vertices",
+        default=True,
+    )
+    snap_mids: bpy.props.BoolProperty(
+        name="Snap Midpoints",
+        description="Snap to edge midpoints",
+        default=True,
+    )
+    snap_inters: bpy.props.BoolProperty(
+        name="Snap Intersections",
+        description="Snap to edge intersections",
+        default=True,
+    )
+    snap_radius: bpy.props.FloatProperty(
+        name="Snap Radius",
+        description="Snap radius in scene units",
+        default=0.25,
+        min=0.0,
+    )
+    grid_step: bpy.props.FloatProperty(
+        name="Grid Step",
+        description="Grid step in scene units",
+        default=1.0,
+        min=0.001,
+    )
 
 
 def register():
