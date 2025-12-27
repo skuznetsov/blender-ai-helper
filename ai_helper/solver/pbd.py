@@ -13,6 +13,7 @@ from ..sketch.constraints import (
     HorizontalConstraint,
     ParallelConstraint,
     MidpointConstraint,
+    EqualLengthConstraint,
     SketchConstraint,
     PerpendicularConstraint,
     VerticalConstraint,
@@ -95,6 +96,8 @@ def solve(
                 err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
+            elif isinstance(constraint, EqualLengthConstraint):
+                err = _apply_equal_length(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -177,6 +180,8 @@ def solve(
                 err = _apply_perpendicular(points, line_map, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
+            elif isinstance(constraint, EqualLengthConstraint):
+                err = _apply_equal_length(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -446,6 +451,8 @@ def _constraint_error(
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=90.0)
     if isinstance(constraint, MidpointConstraint):
         return _midpoint_error(points, line_map, constraint)
+    if isinstance(constraint, EqualLengthConstraint):
+        return _equal_length_error(points, line_map, constraint)
     if isinstance(constraint, FixConstraint):
         return 0.0
     return 0.0
@@ -679,3 +686,104 @@ def _midpoint_error(
     mid_x = (p1.x + p2.x) / 2.0
     mid_y = (p1.y + p2.y) / 2.0
     return math.hypot(pm.x - mid_x, pm.y - mid_y)
+
+
+def _apply_equal_length(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: EqualLengthConstraint,
+) -> float:
+    line_a = line_map.get(c.line_a)
+    line_b = line_map.get(c.line_b)
+    if not line_a or not line_b:
+        return 0.0
+
+    a1 = points.get(line_a[0])
+    a2 = points.get(line_a[1])
+    b1 = points.get(line_b[0])
+    b2 = points.get(line_b[1])
+    if a1 is None or a2 is None or b1 is None or b2 is None:
+        return 0.0
+
+    avx = a2.x - a1.x
+    avy = a2.y - a1.y
+    bvx = b2.x - b1.x
+    bvy = b2.y - b1.y
+
+    len_a = math.hypot(avx, avy)
+    len_b = math.hypot(bvx, bvy)
+    if len_a < 1e-8 or len_b < 1e-8:
+        return 0.0
+
+    err = len_a - len_b
+    if abs(err) < 1e-8:
+        return 0.0
+
+    w_a = (0.0 if a1.locked else 1.0) + (0.0 if a2.locked else 1.0)
+    w_b = (0.0 if b1.locked else 1.0) + (0.0 if b2.locked else 1.0)
+    if w_a == 0.0 and w_b == 0.0:
+        return err
+
+    total = w_a + w_b
+    move_a = -err * (w_b / total)
+    move_b = err * (w_a / total)
+
+    _scale_line(points, line_a[0], line_a[1], move_a / len_a)
+    _scale_line(points, line_b[0], line_b[1], move_b / len_b)
+    return err
+
+
+def _scale_line(points: Dict[str, PointState], p1_id: str, p2_id: str, scale_delta: float) -> None:
+    p1 = points.get(p1_id)
+    p2 = points.get(p2_id)
+    if p1 is None or p2 is None:
+        return
+
+    if p1.locked and p2.locked:
+        return
+
+    cx = (p1.x + p2.x) / 2.0
+    cy = (p1.y + p2.y) / 2.0
+    dx1 = p1.x - cx
+    dy1 = p1.y - cy
+    dx2 = p2.x - cx
+    dy2 = p2.y - cy
+    factor = 1.0 + scale_delta
+
+    if p1.locked and not p2.locked:
+        p2.x = p1.x + (p2.x - p1.x) * factor
+        p2.y = p1.y + (p2.y - p1.y) * factor
+        return
+    if p2.locked and not p1.locked:
+        p1.x = p2.x + (p1.x - p2.x) * factor
+        p1.y = p2.y + (p1.y - p2.y) * factor
+        return
+
+    if not p1.locked:
+        p1.x = cx + dx1 * factor
+        p1.y = cy + dy1 * factor
+    if not p2.locked:
+        p2.x = cx + dx2 * factor
+        p2.y = cy + dy2 * factor
+
+
+def _equal_length_error(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: EqualLengthConstraint,
+) -> float:
+    line_a = line_map.get(c.line_a)
+    line_b = line_map.get(c.line_b)
+    if not line_a or not line_b:
+        return 0.0
+
+    a1 = points.get(line_a[0])
+    a2 = points.get(line_a[1])
+    b1 = points.get(line_b[0])
+    b2 = points.get(line_b[1])
+    if a1 is None or a2 is None or b1 is None or b2 is None:
+        return 0.0
+
+    len_a = math.hypot(a2.x - a1.x, a2.y - a1.y)
+    len_b = math.hypot(b2.x - b1.x, b2.y - b1.y)
+    return len_a - len_b

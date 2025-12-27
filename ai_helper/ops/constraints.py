@@ -8,6 +8,7 @@ from ..sketch.constraints import (
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
+    EqualLengthConstraint,
     ParallelConstraint,
     PerpendicularConstraint,
     RadiusConstraint,
@@ -241,6 +242,8 @@ def _select_constraint_geometry(obj, constraint, extend=False):
     elif isinstance(constraint, MidpointConstraint):
         edges = [int(constraint.line)]
         verts = [int(constraint.point)]
+    elif isinstance(constraint, EqualLengthConstraint):
+        edges = [int(constraint.line_a), int(constraint.line_b)]
     elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
         edges = [int(constraint.line)]
     elif isinstance(constraint, (ParallelConstraint, PerpendicularConstraint)):
@@ -561,6 +564,38 @@ class AIHELPER_OT_add_midpoint_constraint(bpy.types.Operator):
         _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Midpoint constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_equal_length_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_equal_length_constraint"
+    bl_label = "Add Equal Length"
+    bl_description = "Make two selected edges have equal length"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        if len(edges) != 2:
+            self.report({"WARNING"}, "Select 2 edges")
+            return {"CANCELLED"}
+
+        constraint = EqualLengthConstraint(
+            id=new_constraint_id(),
+            line_a=str(edges[0].index),
+            line_b=str(edges[1].index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Equal length constraint added")
         return {"FINISHED"}
 
 
@@ -1155,6 +1190,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_midpoint_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1192,6 +1228,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_coincident_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_equal_length_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

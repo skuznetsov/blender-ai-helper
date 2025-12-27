@@ -117,6 +117,22 @@ class MidpointConstraint:
 
 
 @dataclass
+class EqualLengthConstraint:
+    id: str
+    line_a: str
+    line_b: str
+    kind: str = field(init=False, default="equal_length")
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "line_a": self.line_a,
+            "line_b": self.line_b,
+        }
+
+
+@dataclass
 class RadiusConstraint:
     id: str
     entity: str
@@ -146,6 +162,7 @@ SketchConstraint = (
     | PerpendicularConstraint
     | CoincidentConstraint
     | MidpointConstraint
+    | EqualLengthConstraint
     | RadiusConstraint
     | FixConstraint
 )
@@ -195,6 +212,12 @@ def constraint_from_dict(data: Dict[str, object]) -> SketchConstraint:
             id=str(data["id"]),
             line=str(data["line"]),
             point=str(data["point"]),
+        )
+    if kind == "equal_length":
+        return EqualLengthConstraint(
+            id=str(data["id"]),
+            line_a=str(data["line_a"]),
+            line_b=str(data["line_b"]),
         )
     if kind == "radius":
         return RadiusConstraint(

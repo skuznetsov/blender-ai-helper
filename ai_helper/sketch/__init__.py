@@ -9,6 +9,7 @@ from .constraints import (
     PerpendicularConstraint,
     CoincidentConstraint,
     MidpointConstraint,
+    EqualLengthConstraint,
     RadiusConstraint,
     FixConstraint,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "PerpendicularConstraint",
     "CoincidentConstraint",
     "MidpointConstraint",
+    "EqualLengthConstraint",
     "RadiusConstraint",
     "FixConstraint",
 ]
