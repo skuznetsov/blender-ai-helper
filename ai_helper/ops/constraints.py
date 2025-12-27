@@ -1,8 +1,10 @@
 import math
 
 import bpy
+import bmesh
 from ..sketch.constraints import (
     AngleConstraint,
+    CoincidentConstraint,
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
@@ -11,7 +13,7 @@ from ..sketch.constraints import (
     RadiusConstraint,
     VerticalConstraint,
 )
-from ..sketch.circles import find_circle_by_vertex, load_circles, update_circle_radius
+from ..sketch.circles import find_circle, find_circle_by_vertex, load_circles, update_circle_radius
 from ..sketch.dimensions import (
     clear_dimensions,
     get_dimension_constraint_id,
@@ -154,6 +156,40 @@ def _selected_circle(obj):
             if circle:
                 return circle
     return None
+
+
+def _set_selection(obj, verts=None, edges=None, extend=False):
+    verts = verts or []
+    edges = edges or []
+
+    if obj.mode == "EDIT":
+        bm = bmesh.from_edit_mesh(obj.data)
+        if not extend:
+            for v in bm.verts:
+                v.select = False
+            for e in bm.edges:
+                e.select = False
+        for vid in verts:
+            if 0 <= vid < len(bm.verts):
+                bm.verts[vid].select = True
+        for eid in edges:
+            if 0 <= eid < len(bm.edges):
+                bm.edges[eid].select = True
+        bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+        return
+
+    if not extend:
+        for v in obj.data.vertices:
+            v.select = False
+        for e in obj.data.edges:
+            e.select = False
+    for vid in verts:
+        if 0 <= vid < len(obj.data.vertices):
+            obj.data.vertices[vid].select = True
+    for eid in edges:
+        if 0 <= eid < len(obj.data.edges):
+            obj.data.edges[eid].select = True
+    obj.data.update()
 
 
 def _format_diag(diag):
@@ -900,6 +936,72 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_select_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.select_constraint"
+    bl_label = "Select Constraint"
+    bl_description = "Select geometry associated with a constraint"
+    bl_options = {"REGISTER", "UNDO"}
+
+    constraint_id: bpy.props.StringProperty()
+    extend: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    def invoke(self, context, event):
+        self.extend = bool(event.shift)
+        return self.execute(context)
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        constraint_id = getattr(self, "constraint_id", None)
+        if not constraint_id:
+            self.report({"WARNING"}, "No constraint selected")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        target = None
+        for constraint in constraints:
+            if getattr(constraint, "id", None) == constraint_id:
+                target = constraint
+                break
+        if target is None:
+            self.report({"WARNING"}, "Constraint not found")
+            return {"CANCELLED"}
+
+        verts = []
+        edges = []
+        if isinstance(target, DistanceConstraint):
+            verts = [int(target.p1), int(target.p2)]
+        elif isinstance(target, AngleConstraint):
+            verts = [int(target.p1), int(target.vertex), int(target.p2)]
+        elif isinstance(target, FixConstraint):
+            verts = [int(target.point)]
+        elif isinstance(target, CoincidentConstraint):
+            verts = [int(target.p1), int(target.p2)]
+        elif isinstance(target, RadiusConstraint):
+            circles = load_circles(obj)
+            circle = find_circle(circles, target.entity)
+            if circle:
+                verts = [int(v) for v in circle.get("verts", [])]
+        elif isinstance(target, (HorizontalConstraint, VerticalConstraint)):
+            edges = [int(target.line)]
+        elif isinstance(target, (ParallelConstraint, PerpendicularConstraint)):
+            edges = [int(target.line_a), int(target.line_b)]
+        else:
+            self.report({"WARNING"}, "Constraint type not supported for selection")
+            return {"CANCELLED"}
+
+        if not verts and not edges:
+            self.report({"WARNING"}, "No geometry found for constraint")
+            return {"CANCELLED"}
+
+        context.view_layer.objects.active = obj
+        _set_selection(obj, verts=verts, edges=edges, extend=self.extend)
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_add_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_horizontal_constraint)
@@ -918,9 +1020,11 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_update_dimensions)
     bpy.utils.register_class(AIHELPER_OT_clear_dimensions)
     bpy.utils.register_class(AIHELPER_OT_edit_selected_dimension)
+    bpy.utils.register_class(AIHELPER_OT_select_constraint)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_select_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_selected_dimension)
     bpy.utils.unregister_class(AIHELPER_OT_clear_dimensions)
     bpy.utils.unregister_class(AIHELPER_OT_update_dimensions)

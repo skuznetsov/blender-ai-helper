@@ -65,6 +65,8 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
                 row = layout.row(align=True)
                 label = f"{constraint.kind} {constraint.id[:6]}"
                 row.label(text=label)
+                op = row.operator("aihelper.select_constraint", text="Sel")
+                op.constraint_id = constraint.id
                 if isinstance(constraint, DistanceConstraint):
                     op = row.operator("aihelper.edit_distance_constraint", text="Edit")
                     op.constraint_id = constraint.id
