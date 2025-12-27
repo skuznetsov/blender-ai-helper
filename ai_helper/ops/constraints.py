@@ -622,6 +622,21 @@ class AIHELPER_OT_clear_constraints(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_clear_solver_report(bpy.types.Operator):
+    bl_idname = "aihelper.clear_solver_report"
+    bl_label = "Clear Diagnostics"
+    bl_description = "Clear solver diagnostics output"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        props.last_solver_report = ""
+        props.last_solver_details = ""
+        props.last_solver_worst_id = ""
+        self.report({"INFO"}, "Diagnostics cleared")
+        return {"FINISHED"}
+
+
 class AIHELPER_OT_update_dimensions(bpy.types.Operator):
     bl_idname = "aihelper.update_dimensions"
     bl_label = "Update Dimensions"
@@ -1062,6 +1077,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
     bpy.utils.register_class(AIHELPER_OT_solve_constraints)
     bpy.utils.register_class(AIHELPER_OT_clear_constraints)
+    bpy.utils.register_class(AIHELPER_OT_clear_solver_report)
     bpy.utils.register_class(AIHELPER_OT_edit_distance_constraint)
     bpy.utils.register_class(AIHELPER_OT_edit_angle_constraint)
     bpy.utils.register_class(AIHELPER_OT_edit_radius_constraint)
@@ -1083,6 +1099,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_edit_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_edit_distance_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_clear_solver_report)
     bpy.utils.unregister_class(AIHELPER_OT_clear_constraints)
     bpy.utils.unregister_class(AIHELPER_OT_solve_constraints)
     bpy.utils.unregister_class(AIHELPER_OT_add_fix_constraint)

@@ -85,6 +85,8 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         if props.last_solver_details:
             for line in props.last_solver_details.splitlines():
                 layout.label(text=line)
+        if props.last_solver_report or props.last_solver_details:
+            layout.operator("aihelper.clear_solver_report", text="Clear Diagnostics")
 
 
 class AIHELPER_PT_ops3d(bpy.types.Panel):

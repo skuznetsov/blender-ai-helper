@@ -55,6 +55,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Constraint diagnostics list (needs Blender validation).
   - [~] Select constraint geometry from list (needs Blender validation).
   - [~] Select worst constraint from diagnostics (needs Blender validation).
+  - [~] Clear diagnostics button (needs Blender validation).
 - [~] Circle tool + radius constraints (needs Blender validation).
   - DoD: circle can be added and radius constraints solve against it.
 
