@@ -42,6 +42,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.input_str = ""
         self.relative_mode = True
         self.axis_lock = None
+        self.preview_str = ""
         self.snap_enabled = True
         self.snap_grid = True
         self.snap_verts = True
@@ -61,6 +62,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.input_str = ""
         self.relative_mode = True
         self.axis_lock = None
+        self.preview_str = ""
         props = context.scene.ai_helper
         self.auto_constraints = props.auto_constraints
         self.hv_tolerance_deg = props.hv_tolerance_deg
@@ -110,6 +112,11 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
+        if event.type == "MOUSEMOVE":
+            self._update_preview(context, event)
+            self._set_header(context)
+            return {"RUNNING_MODAL"}
+
         if event.value == "PRESS" and event.ascii:
             if event.ascii in "0123456789-+.,@<=":
                 self.input_str += event.ascii
@@ -131,6 +138,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
                 self._apply_auto_constraints(context, edge_id, self.start, end)
             self.start = end
             self.input_str = ""
+            self.preview_str = ""
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -149,6 +157,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
                 self._apply_auto_constraints(context, edge_id, self.start, point)
             self.start = point
             self.input_str = ""
+            self.preview_str = ""
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -160,7 +169,10 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         snap = "SNAP" if self.snap_enabled else "FREE"
         axis = self.axis_lock if self.axis_lock else "-"
         text = self.input_str if self.input_str else "<input>"
-        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {snap} | LOCK:{axis} | {text}")
+        preview = f" | {self.preview_str}" if self.preview_str else ""
+        context.area.header_text_set(
+            f"Sketch Mode | {mode} | {auto} | {snap} | LOCK:{axis} | {text}{preview}"
+        )
 
     def _clear_header(self, context):
         context.area.header_text_set(None)
@@ -251,6 +263,22 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         if self.axis_lock == "Y":
             return Vector((self.start.x, location.y, 0.0))
         return location
+
+    def _update_preview(self, context, event):
+        if self.start is None:
+            self.preview_str = ""
+            return
+
+        point = self._mouse_to_plane(context, event)
+        if point is None:
+            self.preview_str = ""
+            return
+
+        dx = point.x - self.start.x
+        dy = point.y - self.start.y
+        length = math.hypot(dx, dy)
+        angle = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
+        self.preview_str = f"len={length:.3f} ang={angle:.1f}"
 
     def _snap_to_grid(self, context, location):
         if not self.snap_grid:

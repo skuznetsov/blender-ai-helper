@@ -33,6 +33,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - Input formats: `x,y`, `@len<angle`, `dx,dy`.
   - DoD: user can draw line with numeric input.
   - [~] Axis lock toggle (X/Y) while drawing (needs Blender validation).
+  - [~] Live length/angle preview while moving mouse (needs Blender validation).
 - [~] Precision coordinate edit for vertices (dialog).
   - DoD: selected vertex can be set to exact XY coordinates.
 - [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
