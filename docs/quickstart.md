@@ -13,7 +13,10 @@
 4. Inspect the preview and click Apply.
 
 ## Sketch (WIP)
-- Sketch Mode is a stub for now. It will be replaced by a modal sketch tool.
+- Sketch Mode creates line segments on the XY plane.
+- Click to set a start point, then type `x,y` and press Enter.
+- Default mode is REL; press Tab to toggle ABS/REL or prefix `=` for absolute.
+- Polar input: `@len<angle` (degrees).
 
 ## Notes
 - The LLM adapter defaults to mock mode unless a Grok adapter path is set.

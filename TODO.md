@@ -29,7 +29,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: query_radius / nearest returns correct points in tests.
 
 ## 4) Sketch UX (CAUTION)
-- [ ] Sketch Mode modal operator with command bar input.
+- [~] Sketch Mode modal operator with command bar input.
   - Input formats: `x,y`, `@len<angle`, `dx,dy`.
   - DoD: user can draw line with numeric input.
 - [ ] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
@@ -61,7 +61,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 
 ## 8) Documentation (SAFE)
 - [x] Quick-start guide + UX cheat sheet (inputs, constraints, modes).
-  - DoD: new user can draw + extrude in <10 minutes.
+  - DoD: new user can draw lines and preview tool calls in <10 minutes.
 - [x] Architecture notes (solver, data flow, LLM safety).
   - DoD: explains rebuild and conflict policy.
 
