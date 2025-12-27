@@ -30,6 +30,7 @@
 - Symmetry: select an edge and two vertices to mirror them across the edge.
 - Tangent: select an edge and a circle to make them tangent.
 - Precision edit: select a vertex and use Set Vertex Coords to enter exact coordinates.
+- Precision edit: select an edge and use Set Edge Length to set its exact length.
 - Dimensions: use Update Dimensions to create text labels for distance, angle, and radius constraints.
 - Constraint list: use Sel to highlight the geometry for a constraint.
 - Diagnostics: use Select Worst to jump to the largest error after solve.

@@ -36,6 +36,8 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Live length/angle preview while moving mouse (needs Blender validation).
 - [~] Precision coordinate edit for vertices (dialog).
   - DoD: selected vertex can be set to exact XY coordinates.
+- [~] Precision edge length edit (dialog).
+  - DoD: selected edge can be set to exact length.
 - [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
 - [x] Constraint storage on sketch mesh + solver bridge.
