@@ -41,6 +41,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.start = None
         self.input_str = ""
         self.relative_mode = True
+        self.axis_lock = None
         self.snap_enabled = True
         self.snap_grid = True
         self.snap_verts = True
@@ -59,6 +60,7 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.start = None
         self.input_str = ""
         self.relative_mode = True
+        self.axis_lock = None
         props = context.scene.ai_helper
         self.auto_constraints = props.auto_constraints
         self.hv_tolerance_deg = props.hv_tolerance_deg
@@ -86,6 +88,14 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         if event.type == "A" and event.value == "PRESS":
             self.auto_constraints = not self.auto_constraints
             context.scene.ai_helper.auto_constraints = self.auto_constraints
+            self._set_header(context)
+            return {"RUNNING_MODAL"}
+
+        if event.type in {"X", "Y"} and event.value == "PRESS":
+            if self.axis_lock == event.type:
+                self.axis_lock = None
+            else:
+                self.axis_lock = event.type
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -148,8 +158,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         mode = "REL" if self.relative_mode else "ABS"
         auto = "AUTO" if self.auto_constraints else "MANUAL"
         snap = "SNAP" if self.snap_enabled else "FREE"
+        axis = self.axis_lock if self.axis_lock else "-"
         text = self.input_str if self.input_str else "<input>"
-        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {snap} | {text}")
+        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {snap} | LOCK:{axis} | {text}")
 
     def _clear_header(self, context):
         context.area.header_text_set(None)
@@ -224,13 +235,22 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
     def _snap_location(self, context, location, event):
         if not self.snap_enabled or event.shift:
-            return location
+            return self._apply_axis_lock(location)
 
         snapped = self._snap_to_features(context, location)
         if snapped is not None:
-            return snapped
+            return self._apply_axis_lock(snapped)
 
-        return self._snap_to_grid(context, location)
+        return self._apply_axis_lock(self._snap_to_grid(context, location))
+
+    def _apply_axis_lock(self, location):
+        if self.start is None or self.axis_lock is None:
+            return location
+        if self.axis_lock == "X":
+            return Vector((location.x, self.start.y, 0.0))
+        if self.axis_lock == "Y":
+            return Vector((self.start.x, location.y, 0.0))
+        return location
 
     def _snap_to_grid(self, context, location):
         if not self.snap_grid:
