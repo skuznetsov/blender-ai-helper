@@ -198,10 +198,17 @@ def _format_diag(diag):
     return f"{status} it={diag.iterations} err={diag.max_error:.4f} fallback={fallback}"
 
 
+def _base_constraint_id(constraint_id):
+    if not constraint_id:
+        return ""
+    return constraint_id.split(":", 1)[0]
+
+
 def _format_diag_details(diag):
     lines = []
     for entry in diag.worst_constraints:
-        cid = entry.constraint_id or "?"
+        base_id = _base_constraint_id(entry.constraint_id)
+        cid = base_id or "?"
         short = cid[:6] if cid != "?" else cid
         lines.append(f"{entry.kind} {short} err={entry.error:.4f}")
     return "\n".join(lines)
@@ -211,7 +218,7 @@ def _update_solver_report(context, diag):
     props = context.scene.ai_helper
     props.last_solver_report = _format_diag(diag)
     props.last_solver_details = _format_diag_details(diag)
-    props.last_solver_worst_id = diag.worst_constraint_id or ""
+    props.last_solver_worst_id = _base_constraint_id(diag.worst_constraint_id)
 
 
 def _select_constraint_geometry(obj, constraint, extend=False):
