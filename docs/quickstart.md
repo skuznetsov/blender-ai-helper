@@ -22,6 +22,7 @@
 - Constraints: select edges or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Angle/Radius/Parallel/Perpendicular/Fix.
 - Angle constraints: select two connected edges and set the target angle.
 - Radius constraints: select a circle vertex or edge to attach a radius.
+- Precision edit: select a vertex and use Set Vertex Coords to enter exact coordinates.
 - Dimensions: use Update Dimensions to create text labels for distance, angle, and radius constraints.
 - Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.

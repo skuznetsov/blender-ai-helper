@@ -120,6 +120,9 @@ class AIHELPER_PT_sketch(bpy.types.Panel):
         col.prop(props, "snap_inters")
         col.prop(props, "snap_radius")
         col.prop(props, "grid_step")
+        layout.separator()
+        layout.label(text="Precision")
+        layout.operator("aihelper.set_vertex_coords", text="Set Vertex Coords")
 
 
 def register():

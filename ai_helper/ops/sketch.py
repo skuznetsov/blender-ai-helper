@@ -7,6 +7,7 @@ from mathutils import Matrix, Vector
 
 from ..sketch.constraints import HorizontalConstraint, VerticalConstraint
 from ..sketch.circles import append_circle, new_circle_id
+from ..sketch.dimensions import update_dimensions
 from ..sketch.quadtree import Point2D, Quadtree
 from ..sketch.solver_bridge import solve_mesh
 from ..sketch.store import append_constraint, load_constraints, new_constraint_id
@@ -24,6 +25,10 @@ def ensure_sketch_object(context):
     obj = bpy.data.objects.new(name, mesh)
     context.collection.objects.link(obj)
     return obj
+
+
+def _selected_vertices(obj):
+    return [v for v in obj.data.vertices if v.select]
 
 
 class AIHELPER_OT_sketch_mode(bpy.types.Operator):
@@ -455,11 +460,81 @@ class AIHELPER_OT_add_circle(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_set_vertex_coords(bpy.types.Operator):
+    bl_idname = "aihelper.set_vertex_coords"
+    bl_label = "Set Vertex Coords"
+    bl_description = "Set coordinates for the selected vertex"
+    bl_options = {"REGISTER", "UNDO"}
+
+    x: bpy.props.FloatProperty(
+        name="X",
+        description="X coordinate",
+        default=0.0,
+    )
+    y: bpy.props.FloatProperty(
+        name="Y",
+        description="Y coordinate",
+        default=0.0,
+    )
+    relative: bpy.props.BoolProperty(
+        name="Relative",
+        description="Apply coordinates as offsets",
+        default=False,
+    )
+
+    def invoke(self, context, _event):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        verts = _selected_vertices(obj)
+        if len(verts) != 1:
+            self.report({"WARNING"}, "Select 1 vertex")
+            return {"CANCELLED"}
+
+        v = verts[0]
+        self.x = v.co.x
+        self.y = v.co.y
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        verts = _selected_vertices(obj)
+        if len(verts) != 1:
+            self.report({"WARNING"}, "Select 1 vertex")
+            return {"CANCELLED"}
+
+        v = verts[0]
+        if self.relative:
+            v.co.x += self.x
+            v.co.y += self.y
+        else:
+            v.co.x = self.x
+            v.co.y = self.y
+        v.co.z = 0.0
+        obj.data.update()
+
+        constraints = load_constraints(obj)
+        if constraints:
+            solve_mesh(obj, constraints)
+        update_dimensions(context, obj, constraints)
+
+        self.report({"INFO"}, "Vertex updated")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_sketch_mode)
     bpy.utils.register_class(AIHELPER_OT_add_circle)
+    bpy.utils.register_class(AIHELPER_OT_set_vertex_coords)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_set_vertex_coords)
     bpy.utils.unregister_class(AIHELPER_OT_add_circle)
     bpy.utils.unregister_class(AIHELPER_OT_sketch_mode)
