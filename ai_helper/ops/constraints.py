@@ -1,3 +1,5 @@
+import math
+
 import bpy
 from ..sketch.constraints import (
     AngleConstraint,
@@ -63,6 +65,75 @@ def _selected_vertices(obj):
     return [v for v in obj.data.vertices if v.select]
 
 
+def _distance_targets(obj):
+    edge = _selected_edge(obj)
+    if edge is not None:
+        v1 = obj.data.vertices[edge.vertices[0]]
+        v2 = obj.data.vertices[edge.vertices[1]]
+        return v1, v2
+
+    verts = _selected_vertices(obj)
+    if len(verts) == 2:
+        return verts[0], verts[1]
+    return None
+
+
+def _angle_targets(obj):
+    edges = _selected_edges(obj)
+    shared = _shared_vertex_for_edges(edges)
+    if shared is None:
+        return None
+
+    p1, vertex, p2 = shared
+    try:
+        v1 = obj.data.vertices[p1]
+        vtx = obj.data.vertices[vertex]
+        v2 = obj.data.vertices[p2]
+    except IndexError:
+        return None
+
+    v1_vec = v1.co - vtx.co
+    v2_vec = v2.co - vtx.co
+    len1 = v1_vec.length
+    len2 = v2_vec.length
+    if len1 < 1e-8 or len2 < 1e-8:
+        return None
+
+    dot = v1_vec.dot(v2_vec)
+    cos_val = max(-1.0, min(1.0, dot / (len1 * len2)))
+    angle_deg = math.degrees(math.acos(cos_val))
+    return p1, vertex, p2, angle_deg
+
+
+def _circle_current_radius(obj, circle):
+    center_id = circle.get("center")
+    vert_ids = circle.get("verts", [])
+    if center_id is None or not vert_ids:
+        return None
+
+    try:
+        center = obj.data.vertices[int(center_id)].co
+    except (ValueError, IndexError):
+        return None
+
+    radius = float(circle.get("radius", 0.0))
+    if radius > 0.0:
+        return radius
+
+    total = 0.0
+    count = 0
+    for vid in vert_ids:
+        try:
+            vert = obj.data.vertices[int(vid)]
+        except (ValueError, IndexError):
+            continue
+        total += (vert.co - center).length
+        count += 1
+    if count == 0:
+        return None
+    return total / count
+
+
 def _selected_circle(obj):
     circles = load_circles(obj)
     if not circles:
@@ -104,22 +175,32 @@ class AIHELPER_OT_add_distance_constraint(bpy.types.Operator):
         min=0.0,
     )
 
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        targets = _distance_targets(obj)
+        if targets is None:
+            self.report({"WARNING"}, "Select 1 edge or 2 vertices")
+            return {"CANCELLED"}
+
+        v1, v2 = targets
+        self.distance = (v2.co - v1.co).length
+        return context.window_manager.invoke_props_dialog(self)
+
     def execute(self, context):
         obj = _get_sketch_object(context)
         if obj is None:
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        edge = _selected_edge(obj)
-        if edge is not None:
-            v1 = obj.data.vertices[edge.vertices[0]]
-            v2 = obj.data.vertices[edge.vertices[1]]
-        else:
-            verts = _selected_vertices(obj)
-            if len(verts) != 2:
-                self.report({"WARNING"}, "Select 1 edge or 2 vertices")
-                return {"CANCELLED"}
-            v1, v2 = verts
+        targets = _distance_targets(obj)
+        if targets is None:
+            self.report({"WARNING"}, "Select 1 edge or 2 vertices")
+            return {"CANCELLED"}
+        v1, v2 = targets
 
         current = (v2.co - v1.co).length
         target = self.distance if self.distance > 0.0 else current
@@ -210,19 +291,33 @@ class AIHELPER_OT_add_angle_constraint(bpy.types.Operator):
         max=180.0,
     )
 
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        targets = _angle_targets(obj)
+        if targets is None:
+            self.report({"WARNING"}, "Select 2 edges sharing a vertex")
+            return {"CANCELLED"}
+
+        _p1, _vertex, _p2, angle_deg = targets
+        self.degrees = angle_deg
+        return context.window_manager.invoke_props_dialog(self)
+
     def execute(self, context):
         obj = _get_sketch_object(context)
         if obj is None:
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        edges = _selected_edges(obj)
-        shared = _shared_vertex_for_edges(edges)
-        if shared is None:
+        targets = _angle_targets(obj)
+        if targets is None:
             self.report({"WARNING"}, "Select 2 edges sharing a vertex")
             return {"CANCELLED"}
 
-        p1, vertex, p2 = shared
+        p1, vertex, p2, _angle_deg = targets
         constraint = AngleConstraint(
             id=new_constraint_id(),
             p1=str(p1),
@@ -246,6 +341,32 @@ class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
     bl_description = "Add a radius constraint to a circle"
     bl_options = {"REGISTER", "UNDO"}
 
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Target radius",
+        min=0.0,
+        default=1.0,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        circle = _selected_circle(obj)
+        if circle is None:
+            self.report({"WARNING"}, "Select a circle vertex or edge")
+            return {"CANCELLED"}
+
+        radius = _circle_current_radius(obj, circle)
+        if radius is None:
+            self.report({"WARNING"}, "Circle metadata missing")
+            return {"CANCELLED"}
+
+        self.radius = radius
+        return context.window_manager.invoke_props_dialog(self)
+
     def execute(self, context):
         obj = _get_sketch_object(context)
         if obj is None:
@@ -257,33 +378,12 @@ class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
             self.report({"WARNING"}, "Select a circle vertex or edge")
             return {"CANCELLED"}
 
-        center_id = circle.get("center")
-        vert_ids = circle.get("verts", [])
-        if center_id is None or not vert_ids:
-            self.report({"WARNING"}, "Circle metadata missing")
-            return {"CANCELLED"}
-
-        try:
-            center = obj.data.vertices[int(center_id)].co
-        except (ValueError, IndexError):
-            self.report({"WARNING"}, "Circle center not found")
-            return {"CANCELLED"}
-
-        radius = float(circle.get("radius", 0.0))
+        radius = self.radius
         if radius <= 0.0:
-            total = 0.0
-            count = 0
-            for vid in vert_ids:
-                try:
-                    vert = obj.data.vertices[int(vid)]
-                except (ValueError, IndexError):
-                    continue
-                total += (vert.co - center).length
-                count += 1
-            if count == 0:
-                self.report({"WARNING"}, "Circle vertices not found")
+            radius = _circle_current_radius(obj, circle)
+            if radius is None:
+                self.report({"WARNING"}, "Circle metadata missing")
                 return {"CANCELLED"}
-            radius = total / count
 
         constraint = RadiusConstraint(
             id=new_constraint_id(),

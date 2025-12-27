@@ -51,6 +51,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Radius constraint add/edit (needs Blender validation).
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
+  - [~] Constraint add dialogs prefill current values (needs Blender validation).
 - [~] Circle tool + radius constraints (needs Blender validation).
   - DoD: circle can be added and radius constraints solve against it.
 
