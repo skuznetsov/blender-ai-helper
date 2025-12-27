@@ -11,6 +11,7 @@ from ..sketch.constraints import (
     ParallelConstraint,
     PerpendicularConstraint,
     RadiusConstraint,
+    MidpointConstraint,
     VerticalConstraint,
 )
 from ..sketch.circles import find_circle, find_circle_by_vertex, load_circles, update_circle_radius
@@ -237,6 +238,9 @@ def _select_constraint_geometry(obj, constraint, extend=False):
         circle = find_circle(circles, constraint.entity)
         if circle:
             verts = [int(v) for v in circle.get("verts", [])]
+    elif isinstance(constraint, MidpointConstraint):
+        edges = [int(constraint.line)]
+        verts = [int(constraint.point)]
     elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
         edges = [int(constraint.line)]
     elif isinstance(constraint, (ParallelConstraint, PerpendicularConstraint)):
@@ -519,6 +523,44 @@ class AIHELPER_OT_add_coincident_constraint(bpy.types.Operator):
         _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Coincident constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_midpoint_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_midpoint_constraint"
+    bl_label = "Add Midpoint"
+    bl_description = "Make a selected vertex the midpoint of a selected edge"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edge = _selected_edge(obj)
+        verts = _selected_vertices(obj)
+        if edge is None or len(verts) != 1:
+            self.report({"WARNING"}, "Select 1 edge and 1 vertex")
+            return {"CANCELLED"}
+
+        vertex = verts[0]
+        if vertex.index in edge.vertices:
+            self.report({"WARNING"}, "Select a vertex not on the edge")
+            return {"CANCELLED"}
+
+        constraint = MidpointConstraint(
+            id=new_constraint_id(),
+            line=str(edge.index),
+            point=str(vertex.index),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Midpoint constraint added")
         return {"FINISHED"}
 
 
@@ -1112,6 +1154,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_coincident_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1147,6 +1190,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_horizontal_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_parallel_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)

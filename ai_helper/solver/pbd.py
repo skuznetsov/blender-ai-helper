@@ -12,6 +12,7 @@ from ..sketch.constraints import (
     FixConstraint,
     HorizontalConstraint,
     ParallelConstraint,
+    MidpointConstraint,
     SketchConstraint,
     PerpendicularConstraint,
     VerticalConstraint,
@@ -92,6 +93,8 @@ def solve(
                 err = _apply_parallel(points, line_map, constraint)
             elif isinstance(constraint, PerpendicularConstraint):
                 err = _apply_perpendicular(points, line_map, constraint)
+            elif isinstance(constraint, MidpointConstraint):
+                err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -172,6 +175,8 @@ def solve(
                 err = _apply_parallel(points, line_map, constraint)
             elif isinstance(constraint, PerpendicularConstraint):
                 err = _apply_perpendicular(points, line_map, constraint)
+            elif isinstance(constraint, MidpointConstraint):
+                err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, FixConstraint):
                 err = 0.0
             else:
@@ -439,6 +444,8 @@ def _constraint_error(
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=0.0)
     if isinstance(constraint, PerpendicularConstraint):
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=90.0)
+    if isinstance(constraint, MidpointConstraint):
+        return _midpoint_error(points, line_map, constraint)
     if isinstance(constraint, FixConstraint):
         return 0.0
     return 0.0
@@ -600,3 +607,75 @@ def _line_angle_error(
     angle = _signed_angle(va, vb)
     target = math.radians(target_degrees)
     return _wrap_period(angle - target, math.pi)
+
+
+def _apply_midpoint(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: MidpointConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    p1 = points.get(line[0])
+    p2 = points.get(line[1])
+    pm = points.get(c.point)
+    if p1 is None or p2 is None or pm is None:
+        return 0.0
+
+    mid_x = (p1.x + p2.x) / 2.0
+    mid_y = (p1.y + p2.y) / 2.0
+    err_x = pm.x - mid_x
+    err_y = pm.y - mid_y
+    err = math.hypot(err_x, err_y)
+    if err < 1e-8:
+        return 0.0
+
+    w1 = 0.0 if p1.locked else 1.0
+    w2 = 0.0 if p2.locked else 1.0
+    wm = 0.0 if pm.locked else 1.0
+
+    if wm == 0.0:
+        wsum = w1 + w2
+        if wsum == 0.0:
+            return err
+        alpha = 2.0 / wsum
+        if w1 > 0.0:
+            p1.x += err_x * alpha
+            p1.y += err_y * alpha
+        if w2 > 0.0:
+            p2.x += err_x * alpha
+            p2.y += err_y * alpha
+        return err
+
+    alpha = 1.0 / (1.0 + (w1 + w2) / 2.0) if (w1 + w2) > 0.0 else 1.0
+    pm.x -= err_x * alpha
+    pm.y -= err_y * alpha
+    if w1 > 0.0:
+        p1.x += err_x * alpha
+        p1.y += err_y * alpha
+    if w2 > 0.0:
+        p2.x += err_x * alpha
+        p2.y += err_y * alpha
+    return err
+
+
+def _midpoint_error(
+    points: Dict[str, PointState],
+    line_map: Dict[str, Tuple[str, str]],
+    c: MidpointConstraint,
+) -> float:
+    line = line_map.get(c.line)
+    if not line:
+        return 0.0
+
+    p1 = points.get(line[0])
+    p2 = points.get(line[1])
+    pm = points.get(c.point)
+    if p1 is None or p2 is None or pm is None:
+        return 0.0
+
+    mid_x = (p1.x + p2.x) / 2.0
+    mid_y = (p1.y + p2.y) / 2.0
+    return math.hypot(pm.x - mid_x, pm.y - mid_y)
