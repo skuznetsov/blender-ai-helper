@@ -53,6 +53,7 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
         layout.separator()
         layout.operator("aihelper.update_dimensions", text="Update Dimensions")
         layout.operator("aihelper.clear_dimensions", text="Clear Dimensions")
+        layout.operator("aihelper.edit_selected_dimension", text="Edit Selected Dimension")
         if constraints:
             layout.separator()
             for constraint in constraints[:10]:

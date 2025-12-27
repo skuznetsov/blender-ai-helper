@@ -19,6 +19,7 @@
 - Polar input: `@len<angle` (degrees).
 - Constraints: select an edge or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Fix.
 - Dimensions: use Update Dimensions to create text labels for distance constraints.
+- Dimension edit: select a label and use Edit Selected Dimension to update the distance.
 
 ## Notes
 - The LLM adapter defaults to mock mode unless a Grok adapter path is set.

@@ -5,7 +5,10 @@ import bmesh
 from bpy_extras import view3d_utils
 from mathutils import Vector
 
+from ..sketch.constraints import HorizontalConstraint, VerticalConstraint
 from ..sketch.quadtree import Point2D, Quadtree
+from ..sketch.solver_bridge import solve_mesh
+from ..sketch.store import append_constraint, load_constraints, new_constraint_id
 
 class AIHELPER_OT_sketch_mode(bpy.types.Operator):
     bl_idname = "aihelper.sketch_mode"
@@ -24,6 +27,8 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.snap_inters = True
         self.snap_radius = 0.25
         self.grid_step = 1.0
+        self.auto_constraints = True
+        self.hv_tolerance_deg = 8.0
 
     def invoke(self, context, event):
         if context.area.type != "VIEW_3D":
@@ -44,6 +49,11 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
         if event.type == "TAB" and event.value == "PRESS":
             self.relative_mode = not self.relative_mode
+            self._set_header(context)
+            return {"RUNNING_MODAL"}
+
+        if event.type == "A" and event.value == "PRESS":
+            self.auto_constraints = not self.auto_constraints
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -68,7 +78,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
                 self.report({"WARNING"}, "Invalid input")
                 return {"RUNNING_MODAL"}
 
-            self._add_line(context, self.start, end)
+            edge_id = self._add_line(context, self.start, end)
+            if edge_id and self.auto_constraints:
+                self._apply_auto_constraints(context, edge_id, self.start, end)
             self.start = end
             self.input_str = ""
             self._set_header(context)
@@ -84,7 +96,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
                 self._set_header(context)
                 return {"RUNNING_MODAL"}
 
-            self._add_line(context, self.start, point)
+            edge_id = self._add_line(context, self.start, point)
+            if edge_id and self.auto_constraints:
+                self._apply_auto_constraints(context, edge_id, self.start, point)
             self.start = point
             self.input_str = ""
             self._set_header(context)
@@ -94,8 +108,9 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
     def _set_header(self, context):
         mode = "REL" if self.relative_mode else "ABS"
+        auto = "AUTO" if self.auto_constraints else "MANUAL"
         text = self.input_str if self.input_str else "<input>"
-        context.area.header_text_set(f"Sketch Mode | {mode} | {text}")
+        context.area.header_text_set(f"Sketch Mode | {mode} | {auto} | {text}")
 
     def _clear_header(self, context):
         context.area.header_text_set(None)
@@ -300,11 +315,36 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
         v1 = bm.verts.new((start.x, start.y, 0.0))
         v2 = bm.verts.new((end.x, end.y, 0.0))
-        bm.edges.new((v1, v2))
+        edge = bm.edges.new((v1, v2))
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        edge_index = edge.index
 
         bm.to_mesh(obj.data)
         bm.free()
         obj.data.update()
+        return str(edge_index)
+
+    def _apply_auto_constraints(self, context, edge_id, start, end):
+        obj = self._ensure_sketch_object(context)
+        dx = end.x - start.x
+        dy = end.y - start.y
+        if abs(dx) < 1e-8 and abs(dy) < 1e-8:
+            return
+
+        angle = abs(math.degrees(math.atan2(dy, dx)))
+        constraints = []
+
+        if angle < self.hv_tolerance_deg or abs(angle - 180.0) < self.hv_tolerance_deg:
+            constraints.append(HorizontalConstraint(id=new_constraint_id(), line=edge_id))
+        elif abs(angle - 90.0) < self.hv_tolerance_deg:
+            constraints.append(VerticalConstraint(id=new_constraint_id(), line=edge_id))
+
+        for constraint in constraints:
+            append_constraint(obj, constraint)
+
+        if constraints:
+            solve_mesh(obj, load_constraints(obj))
 
 
 def register():

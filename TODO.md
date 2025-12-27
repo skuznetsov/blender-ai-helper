@@ -39,11 +39,11 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 - [~] Dimension overlay objects (length/angle/radius) with direct edit.
   - DoD: editing a dimension updates geometry via solver.
   - [x] Distance labels as text objects.
-  - [ ] Direct edit on labels (type-to-edit or dialog).
+  - [x] Direct edit on labels (dialog).
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
-  - [ ] Auto-constraints on draw.
+  - [x] Auto-constraints on draw (horizontal/vertical).
 
 ## 5) 3D ops (SAFE)
 - [ ] Extrude + Revolve operators (parametric, editable).
