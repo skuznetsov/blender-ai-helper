@@ -17,6 +17,11 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Last solver summary",
         default="",
     )
+    last_solver_details: bpy.props.StringProperty(
+        name="Solver Details",
+        description="Top constraint errors",
+        default="",
+    )
     auto_rebuild: bpy.props.BoolProperty(
         name="Auto Rebuild 3D Ops",
         description="Automatically rebuild 3D ops when sketch updates",

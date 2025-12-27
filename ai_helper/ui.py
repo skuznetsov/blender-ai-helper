@@ -78,6 +78,9 @@ class AIHELPER_PT_constraints(bpy.types.Panel):
                 op.constraint_id = constraint.id
         if props.last_solver_report:
             layout.label(text=props.last_solver_report)
+        if props.last_solver_details:
+            for line in props.last_solver_details.splitlines():
+                layout.label(text=line)
 
 
 class AIHELPER_PT_ops3d(bpy.types.Panel):

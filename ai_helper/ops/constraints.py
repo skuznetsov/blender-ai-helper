@@ -162,6 +162,21 @@ def _format_diag(diag):
     return f"{status} it={diag.iterations} err={diag.max_error:.4f} fallback={fallback}"
 
 
+def _format_diag_details(diag):
+    lines = []
+    for entry in diag.worst_constraints:
+        cid = entry.constraint_id or "?"
+        short = cid[:6] if cid != "?" else cid
+        lines.append(f"{entry.kind} {short} err={entry.error:.4f}")
+    return "\n".join(lines)
+
+
+def _update_solver_report(context, diag):
+    props = context.scene.ai_helper
+    props.last_solver_report = _format_diag(diag)
+    props.last_solver_details = _format_diag_details(diag)
+
+
 class AIHELPER_OT_add_distance_constraint(bpy.types.Operator):
     bl_idname = "aihelper.add_distance_constraint"
     bl_label = "Add Distance"
@@ -215,7 +230,7 @@ class AIHELPER_OT_add_distance_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Distance constraint added")
         return {"FINISHED"}
@@ -243,7 +258,7 @@ class AIHELPER_OT_add_horizontal_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Horizontal constraint added")
         return {"FINISHED"}
@@ -271,7 +286,7 @@ class AIHELPER_OT_add_vertical_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Vertical constraint added")
         return {"FINISHED"}
@@ -329,7 +344,7 @@ class AIHELPER_OT_add_angle_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Angle constraint added")
         return {"FINISHED"}
@@ -395,7 +410,7 @@ class AIHELPER_OT_add_radius_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Radius constraint added")
         return {"FINISHED"}
@@ -427,7 +442,7 @@ class AIHELPER_OT_add_parallel_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Parallel constraint added")
         return {"FINISHED"}
@@ -459,7 +474,7 @@ class AIHELPER_OT_add_perpendicular_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Perpendicular constraint added")
         return {"FINISHED"}
@@ -488,7 +503,7 @@ class AIHELPER_OT_add_fix_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Fix constraint added")
         return {"FINISHED"}
@@ -513,7 +528,7 @@ class AIHELPER_OT_solve_constraints(bpy.types.Operator):
 
         diag = solve_mesh(obj, constraints)
         update_dimensions(context, obj, constraints)
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Constraints solved")
         return {"FINISHED"}
@@ -534,6 +549,7 @@ class AIHELPER_OT_clear_constraints(bpy.types.Operator):
         clear_constraints(obj)
         clear_dimensions(context)
         context.scene.ai_helper.last_solver_report = ""
+        context.scene.ai_helper.last_solver_details = ""
         self.report({"INFO"}, "Constraints cleared")
         return {"FINISHED"}
 
@@ -617,7 +633,7 @@ class AIHELPER_OT_edit_distance_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Distance updated")
         return {"FINISHED"}
@@ -674,7 +690,7 @@ class AIHELPER_OT_edit_angle_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Angle updated")
         return {"FINISHED"}
@@ -729,7 +745,7 @@ class AIHELPER_OT_edit_radius_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Radius updated")
         return {"FINISHED"}
@@ -755,7 +771,7 @@ class AIHELPER_OT_remove_constraint(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
         self.report({"INFO"}, "Constraint removed")
         return {"FINISHED"}
 
@@ -879,7 +895,7 @@ class AIHELPER_OT_edit_selected_dimension(bpy.types.Operator):
 
         diag = solve_mesh(obj, load_constraints(obj))
         update_dimensions(context, obj, load_constraints(obj))
-        context.scene.ai_helper.last_solver_report = _format_diag(diag)
+        _update_solver_report(context, diag)
         self.report({"INFO"}, "Dimension updated")
         return {"FINISHED"}
 
