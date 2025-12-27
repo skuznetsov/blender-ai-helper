@@ -5,6 +5,7 @@ import bmesh
 from ..sketch.constraints import (
     AngleConstraint,
     CoincidentConstraint,
+    ConcentricConstraint,
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
@@ -15,7 +16,13 @@ from ..sketch.constraints import (
     MidpointConstraint,
     VerticalConstraint,
 )
-from ..sketch.circles import find_circle, find_circle_by_vertex, load_circles, update_circle_radius
+from ..sketch.circles import (
+    find_circle,
+    find_circle_by_center,
+    find_circle_by_vertex,
+    load_circles,
+    update_circle_radius,
+)
 from ..sketch.dimensions import (
     clear_dimensions,
     get_dimension_constraint_id,
@@ -149,6 +156,9 @@ def _selected_circle(obj):
         circle = find_circle_by_vertex(circles, str(vert.index))
         if circle:
             return circle
+        circle = find_circle_by_center(circles, str(vert.index))
+        if circle:
+            return circle
 
     for edge in obj.data.edges:
         if not edge.select:
@@ -158,6 +168,37 @@ def _selected_circle(obj):
             if circle:
                 return circle
     return None
+
+
+def _selected_circles(obj):
+    circles = load_circles(obj)
+    if not circles:
+        return []
+
+    found = []
+    seen = set()
+
+    for vert in obj.data.vertices:
+        if not vert.select:
+            continue
+        for circle in (
+            find_circle_by_vertex(circles, str(vert.index)),
+            find_circle_by_center(circles, str(vert.index)),
+        ):
+            if circle and circle.get("id") not in seen:
+                seen.add(circle.get("id"))
+                found.append(circle)
+
+    for edge in obj.data.edges:
+        if not edge.select:
+            continue
+        for vid in edge.vertices:
+            circle = find_circle_by_vertex(circles, str(vid))
+            if circle and circle.get("id") not in seen:
+                seen.add(circle.get("id"))
+                found.append(circle)
+
+    return found
 
 
 def _set_selection(obj, verts=None, edges=None, extend=False):
@@ -244,6 +285,8 @@ def _select_constraint_geometry(obj, constraint, extend=False):
         verts = [int(constraint.point)]
     elif isinstance(constraint, EqualLengthConstraint):
         edges = [int(constraint.line_a), int(constraint.line_b)]
+    elif isinstance(constraint, ConcentricConstraint):
+        verts = [int(constraint.p1), int(constraint.p2)]
     elif isinstance(constraint, (HorizontalConstraint, VerticalConstraint)):
         edges = [int(constraint.line)]
     elif isinstance(constraint, (ParallelConstraint, PerpendicularConstraint)):
@@ -596,6 +639,48 @@ class AIHELPER_OT_add_equal_length_constraint(bpy.types.Operator):
         _update_solver_report(context, diag)
 
         self.report({"INFO"}, "Equal length constraint added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_concentric_constraint(bpy.types.Operator):
+    bl_idname = "aihelper.add_concentric_constraint"
+    bl_label = "Add Concentric"
+    bl_description = "Make two circles share the same center"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        circles = _selected_circles(obj)
+        if len(circles) != 2:
+            self.report({"WARNING"}, "Select 2 circles")
+            return {"CANCELLED"}
+
+        c1, c2 = circles
+        center1 = c1.get("center")
+        center2 = c2.get("center")
+        if not center1 or not center2:
+            self.report({"WARNING"}, "Circle metadata missing")
+            return {"CANCELLED"}
+        if center1 == center2:
+            self.report({"WARNING"}, "Circles already concentric")
+            return {"CANCELLED"}
+
+        constraint = ConcentricConstraint(
+            id=new_constraint_id(),
+            p1=str(center1),
+            p2=str(center2),
+        )
+        append_constraint(obj, constraint)
+
+        diag = solve_mesh(obj, load_constraints(obj))
+        update_dimensions(context, obj, load_constraints(obj))
+        _update_solver_report(context, diag)
+
+        self.report({"INFO"}, "Concentric constraint added")
         return {"FINISHED"}
 
 
@@ -1191,6 +1276,7 @@ def register():
     bpy.utils.register_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_equal_length_constraint)
+    bpy.utils.register_class(AIHELPER_OT_add_concentric_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_parallel_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_perpendicular_constraint)
     bpy.utils.register_class(AIHELPER_OT_add_fix_constraint)
@@ -1229,6 +1315,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_add_midpoint_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_coincident_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_equal_length_constraint)
+    bpy.utils.unregister_class(AIHELPER_OT_add_concentric_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_radius_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_angle_constraint)
     bpy.utils.unregister_class(AIHELPER_OT_add_distance_constraint)

@@ -56,6 +56,13 @@ def find_circle(circles: List[Dict[str, object]], circle_id: str) -> Optional[Di
     return None
 
 
+def find_circle_by_center(circles: List[Dict[str, object]], center_id: str) -> Optional[Dict[str, object]]:
+    for circle in circles:
+        if circle.get("center") == center_id:
+            return circle
+    return None
+
+
 def find_circle_by_vertex(circles: List[Dict[str, object]], vertex_id: str) -> Optional[Dict[str, object]]:
     for circle in circles:
         if vertex_id in circle.get("verts", []):

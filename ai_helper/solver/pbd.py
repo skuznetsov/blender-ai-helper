@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Tuple
 from ..sketch.constraints import (
     AngleConstraint,
     CoincidentConstraint,
+    ConcentricConstraint,
     DistanceConstraint,
     FixConstraint,
     HorizontalConstraint,
@@ -94,6 +95,8 @@ def solve(
                 err = _apply_parallel(points, line_map, constraint)
             elif isinstance(constraint, PerpendicularConstraint):
                 err = _apply_perpendicular(points, line_map, constraint)
+            elif isinstance(constraint, ConcentricConstraint):
+                err = _apply_concentric(points, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -178,6 +181,8 @@ def solve(
                 err = _apply_parallel(points, line_map, constraint)
             elif isinstance(constraint, PerpendicularConstraint):
                 err = _apply_perpendicular(points, line_map, constraint)
+            elif isinstance(constraint, ConcentricConstraint):
+                err = _apply_concentric(points, constraint)
             elif isinstance(constraint, MidpointConstraint):
                 err = _apply_midpoint(points, line_map, constraint)
             elif isinstance(constraint, EqualLengthConstraint):
@@ -449,6 +454,8 @@ def _constraint_error(
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=0.0)
     if isinstance(constraint, PerpendicularConstraint):
         return _line_angle_error(points, line_map, constraint.line_a, constraint.line_b, target_degrees=90.0)
+    if isinstance(constraint, ConcentricConstraint):
+        return _distance_error(points, constraint.p1, constraint.p2, 0.0)
     if isinstance(constraint, MidpointConstraint):
         return _midpoint_error(points, line_map, constraint)
     if isinstance(constraint, EqualLengthConstraint):
@@ -686,6 +693,10 @@ def _midpoint_error(
     mid_x = (p1.x + p2.x) / 2.0
     mid_y = (p1.y + p2.y) / 2.0
     return math.hypot(pm.x - mid_x, pm.y - mid_y)
+
+
+def _apply_concentric(points: Dict[str, PointState], c: ConcentricConstraint) -> float:
+    return _apply_distance(points, DistanceConstraint(id=c.id, p1=c.p1, p2=c.p2, distance=0.0))
 
 
 def _apply_equal_length(
