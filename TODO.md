@@ -66,15 +66,15 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Parallel/Perpendicular constraints in panel.
   - [x] Auto-constraints on draw (horizontal/vertical).
   - [~] Constraint add dialogs prefill current values (needs Blender validation).
-  - [~] Constraint diagnostics list (needs Blender validation).
-  - [~] Select constraint geometry from list (needs Blender validation).
-  - [~] Select worst constraint from diagnostics (needs Blender validation).
-  - [~] Clear diagnostics button (needs Blender validation).
+  - [x] Constraint diagnostics list.
+  - [x] Select constraint geometry from list.
+  - [x] Select worst constraint from diagnostics.
+  - [x] Clear diagnostics button.
 - [x] Circle tool + radius constraints.
   - DoD: circle can be added and radius constraints solve against it.
 
 ## 5) 3D ops (SAFE)
-- [~] Extrude + Revolve operators (parametric, editable).
+- [x] Extrude + Revolve operators (parametric, editable).
   - DoD: parameters can be adjusted after creation.
   - [x] Extrude via edge extrusion + stored params.
   - [x] Revolve via Screw modifier + stored params.

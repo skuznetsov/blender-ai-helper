@@ -96,6 +96,10 @@ def find_dimension_label(constraint_id, kind=None):
     return None
 
 
+def selected_vertex_indices(obj):
+    return [v.index for v in obj.data.vertices if v.select]
+
+
 def add_fix(obj, vid):
     select(obj, verts=[vid])
     result = bpy.ops.aihelper.add_fix_constraint()
@@ -347,6 +351,86 @@ def test_tangent_constraint():
     check(abs(d - 1.0) < 1e-3, "tangent constraint failed")
 
 
+def test_solver_diagnostics_and_selection():
+    obj = new_sketch()
+    v_indices, _ = build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [])
+    add_fix(obj, v_indices[0])
+    add_fix(obj, v_indices[1])
+    select(obj, verts=[v_indices[0], v_indices[1]])
+    result = bpy.ops.aihelper.add_distance_constraint(distance=1.0005)
+    check("FINISHED" in result, "add_distance_constraint failed")
+
+    props = bpy.context.scene.ai_helper
+    check(props.last_solver_report.startswith("WARN"), "solver report not warning")
+    check(bool(props.last_solver_details), "solver details missing")
+    check(bool(props.last_solver_worst_id), "solver worst id missing")
+
+    constraints = load_constraints(obj)
+    distance_constraint = next((c for c in constraints if getattr(c, "kind", "") == "distance"), None)
+    check(distance_constraint is not None, "distance constraint missing")
+    check(distance_constraint.id == props.last_solver_worst_id, "worst id mismatch")
+
+    result = bpy.ops.aihelper.select_constraint(constraint_id=distance_constraint.id)
+    check("FINISHED" in result, "select_constraint failed")
+    check(sorted(selected_vertex_indices(obj)) == sorted(v_indices), "select constraint vertices failed")
+
+    clear_selection(obj)
+    result = bpy.ops.aihelper.select_worst_constraint()
+    check("FINISHED" in result, "select_worst_constraint failed")
+    check(sorted(selected_vertex_indices(obj)) == sorted(v_indices), "select worst constraint vertices failed")
+
+    result = bpy.ops.aihelper.clear_solver_report()
+    check("FINISHED" in result, "clear_solver_report failed")
+    check(
+        props.last_solver_report == ""
+        and props.last_solver_details == ""
+        and props.last_solver_worst_id == "",
+        "clear diagnostics failed",
+    )
+
+
+def test_extrude_rebuild():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    result = bpy.ops.aihelper.extrude_sketch(distance=2.0)
+    check("FINISHED" in result, "extrude_sketch failed")
+    extrude_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "extrude"), None)
+    check(extrude_obj is not None, "extrude object missing")
+    check(abs(float(extrude_obj.get("ai_helper_extrude_distance", 0.0)) - 2.0) < 1e-4, "extrude distance missing")
+    max_z = max(v.co.z for v in extrude_obj.data.vertices)
+    check(abs(max_z - 2.0) < 1e-3, "extrude height incorrect")
+
+    extrude_obj["ai_helper_extrude_distance"] = 3.0
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for extrude")
+    max_z = max(v.co.z for v in extrude_obj.data.vertices)
+    check(abs(max_z - 3.0) < 1e-3, "extrude rebuild incorrect")
+
+
+def test_revolve_rebuild():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    result = bpy.ops.aihelper.revolve_sketch(angle=180.0, steps=16)
+    check("FINISHED" in result, "revolve_sketch failed")
+    revolve_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "revolve"), None)
+    check(revolve_obj is not None, "revolve object missing")
+    check(abs(float(revolve_obj.get("ai_helper_revolve_angle", 0.0)) - 180.0) < 1e-4, "revolve angle missing")
+    check(int(revolve_obj.get("ai_helper_revolve_steps", 0)) == 16, "revolve steps missing")
+    mod = revolve_obj.modifiers.get("AI_Revolve")
+    check(mod is not None, "revolve modifier missing")
+    check(abs(mod.angle - math.radians(180.0)) < 1e-5, "revolve modifier angle incorrect")
+    check(mod.steps == 16, "revolve modifier steps incorrect")
+
+    revolve_obj["ai_helper_revolve_angle"] = 90.0
+    revolve_obj["ai_helper_revolve_steps"] = 8
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for revolve")
+    mod = revolve_obj.modifiers.get("AI_Revolve")
+    check(mod is not None, "revolve modifier missing after rebuild")
+    check(abs(mod.angle - math.radians(90.0)) < 1e-5, "revolve rebuild angle incorrect")
+    check(mod.steps == 8, "revolve rebuild steps incorrect")
+
+
 def run():
     ai_helper.register()
     test_precision_vertex_coords()
@@ -361,6 +445,9 @@ def run():
     test_symmetry_constraint()
     test_circle_constraints()
     test_tangent_constraint()
+    test_solver_diagnostics_and_selection()
+    test_extrude_rebuild()
+    test_revolve_rebuild()
     print("ALL TESTS PASSED")
 
 
