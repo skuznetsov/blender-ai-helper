@@ -52,6 +52,7 @@
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 - Extrude uses selected sketch edges when available (toggle via the Use Selection option).
 - Loft: tag two profile edge sets and run Loft Profiles (use Offset Z if profiles are coplanar).
+- Multi-loft: provide a comma-separated Profile Tags list (3+ tags) in the Loft Profiles operator.
 - Sweep: tag profile edges and a path polyline (or select closed profile + open path edges), then run Sweep Profile (profile follows path with optional twist).
 - 3D modifiers: select a 3D op object and use Add Shell or Add Fillet to apply Solidify/Bevel.
 - History: use Capture Snapshot and Restore in the History panel to jump between steps.

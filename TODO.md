@@ -266,3 +266,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 ## 35) Curved sweep (CAUTION)
 - [x] Sweep profile along polyline path with twist control.
   - DoD: `blender -b --python scripts/validate_blender_ops.py` passes sweep tests.
+
+## 36) Multi-section loft (CAUTION)
+- [x] Loft across 3+ tagged profiles with alignment.
+  - DoD: `blender -b --python scripts/validate_blender_ops.py` passes loft tests.

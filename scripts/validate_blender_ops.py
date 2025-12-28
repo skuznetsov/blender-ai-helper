@@ -775,6 +775,49 @@ def test_loft_profiles():
     check(abs(max_z - 3.0) < 1e-3, "loft rebuild incorrect")
 
 
+def test_loft_multi_profiles():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_rectangle(
+        width=2.0,
+        height=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile_a",
+    )
+    check("FINISHED" in result, "add_rectangle failed for multi loft A")
+    result = bpy.ops.aihelper.add_rectangle(
+        width=1.5,
+        height=0.8,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile_b",
+    )
+    check("FINISHED" in result, "add_rectangle failed for multi loft B")
+    result = bpy.ops.aihelper.add_rectangle(
+        width=1.0,
+        height=0.5,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile_c",
+    )
+    check("FINISHED" in result, "add_rectangle failed for multi loft C")
+    result = bpy.ops.aihelper.loft_profiles(profile_tags="profile_a, profile_b, profile_c", offset_z=1.0)
+    check("FINISHED" in result, "loft_profiles failed for multi")
+    loft_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "loft"), None)
+    check(loft_obj is not None, "multi loft object missing")
+    max_z = max(v.co.z for v in loft_obj.data.vertices)
+    check(abs(max_z - 2.0) < 1e-3, "multi loft height incorrect")
+
+    loft_obj["ai_helper_loft_offset_z"] = 1.5
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for multi loft")
+    max_z = max(v.co.z for v in loft_obj.data.vertices)
+    check(abs(max_z - 3.0) < 1e-3, "multi loft rebuild incorrect")
+
+
 def test_sweep_profile():
     obj = new_sketch()
     result = bpy.ops.aihelper.add_rectangle(
@@ -1251,6 +1294,7 @@ def run():
     test_revolve_rebuild()
     test_shell_and_bevel_modifiers()
     test_loft_profiles()
+    test_loft_multi_profiles()
     test_sweep_profile()
     test_extrude_selection()
     test_history_snapshot_restore()

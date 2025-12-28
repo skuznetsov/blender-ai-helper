@@ -226,6 +226,102 @@ def _loft_mesh_from_source(source, edges_a, edges_b, offset_z):
     return mesh
 
 
+def _align_profile_coords(prev_coords, coords, closed):
+    if len(prev_coords) != len(coords):
+        return coords
+    count = len(coords)
+    if count == 0:
+        return coords
+
+    candidates = [(coords, False)]
+    reversed_coords = list(reversed(coords))
+    candidates.append((reversed_coords, True))
+
+    best = coords
+    best_score = float("inf")
+    for base_coords, _reversed in candidates:
+        if closed:
+            for shift in range(count):
+                score = 0.0
+                for idx in range(count):
+                    a = prev_coords[idx]
+                    b = base_coords[(idx + shift) % count]
+                    score += (a - b).length
+                if score < best_score:
+                    best_score = score
+                    best = [base_coords[(idx + shift) % count] for idx in range(count)]
+        else:
+            score = 0.0
+            for idx in range(count):
+                score += (prev_coords[idx] - base_coords[idx]).length
+            if score < best_score:
+                best_score = score
+                best = list(base_coords)
+    return best
+
+
+def _loft_mesh_from_sections(source, sections, offset_z):
+    if len(sections) < 2:
+        return None
+
+    profile_orders = []
+    closed_flags = []
+    for edges in sections:
+        order, closed = _ordered_vertices_from_edges(source, edges)
+        if not order:
+            return None
+        profile_orders.append(order)
+        closed_flags.append(closed)
+
+    if len(set(closed_flags)) != 1:
+        return None
+    closed = closed_flags[0]
+    counts = {len(order) for order in profile_orders}
+    if len(counts) != 1:
+        return None
+
+    profile_coords = []
+    for order in profile_orders:
+        profile_coords.append([source.data.vertices[i].co.copy() for i in order])
+
+    avg_zs = [sum(coord.z for coord in coords) / len(coords) for coords in profile_coords]
+    if avg_zs:
+        if max(avg_zs) - min(avg_zs) < 1e-6 and abs(offset_z) > 1e-6:
+            for idx, coords in enumerate(profile_coords):
+                if idx == 0:
+                    continue
+                dz = offset_z * idx
+                profile_coords[idx] = [Vector((c.x, c.y, c.z + dz)) for c in coords]
+
+    aligned_coords = [profile_coords[0]]
+    for coords in profile_coords[1:]:
+        aligned_coords.append(_align_profile_coords(aligned_coords[-1], coords, closed))
+
+    mesh = bpy.data.meshes.new("AI_Loft")
+    bm = bmesh.new()
+    sections_bm = []
+    for coords in aligned_coords:
+        section = [bm.verts.new(coord) for coord in coords]
+        sections_bm.append(section)
+    bm.verts.ensure_lookup_table()
+
+    count = len(sections_bm[0])
+    for idx in range(len(sections_bm) - 1):
+        a_section = sections_bm[idx]
+        b_section = sections_bm[idx + 1]
+        for j in range(count if closed else count - 1):
+            k = (j + 1) % count
+            try:
+                bm.faces.new((a_section[j], a_section[k], b_section[k], b_section[j]))
+            except ValueError:
+                pass
+
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return mesh
+
+
 def _path_vertices_from_edges(source, edge_indices):
     order, closed = _ordered_vertices_from_edges(source, edge_indices)
     if not order or closed:
@@ -409,6 +505,11 @@ class AIHELPER_OT_loft_profiles(bpy.types.Operator):
         description="Tag for the second profile edges",
         default="",
     )
+    profile_tags: bpy.props.StringProperty(
+        name="Profile Tags",
+        description="Comma-separated profile tags",
+        default="",
+    )
     offset_z: bpy.props.FloatProperty(
         name="Offset Z",
         description="Offset the second profile along Z when coplanar",
@@ -421,26 +522,37 @@ class AIHELPER_OT_loft_profiles(bpy.types.Operator):
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        edges_a = []
-        edges_b = []
+        sections = []
         tag_a = self.profile_a_tag.strip()
         tag_b = self.profile_b_tag.strip()
-        if tag_a and tag_b:
+        tag_list = [tag.strip() for tag in self.profile_tags.split(",") if tag.strip()]
+
+        if tag_list:
+            for tag in tag_list:
+                _, edges = resolve_tags(source, [tag], prefer_center=False)
+                edges = sorted(set(edges))
+                if not edges:
+                    self.report({"WARNING"}, f"Profile tag has no edges: {tag}")
+                    return {"CANCELLED"}
+                sections.append(edges)
+        elif tag_a and tag_b:
             _, edges_a = resolve_tags(source, [tag_a], prefer_center=False)
             _, edges_b = resolve_tags(source, [tag_b], prefer_center=False)
+            sections = [sorted(set(edges_a)), sorted(set(edges_b))]
         else:
             selected = [e.index for e in source.data.edges if e.select]
             components = _edge_components(source, selected)
             if len(components) >= 2:
-                edges_a, edges_b = components[0], components[1]
+                sections = [sorted(set(component)) for component in components]
 
-        edges_a = sorted(set(edges_a))
-        edges_b = sorted(set(edges_b))
-        if not edges_a or not edges_b:
+        if len(sections) < 2:
             self.report({"WARNING"}, "Select two profiles or provide tags")
             return {"CANCELLED"}
 
-        mesh = _loft_mesh_from_source(source, edges_a, edges_b, self.offset_z)
+        if len(sections) == 2:
+            mesh = _loft_mesh_from_source(source, sections[0], sections[1], self.offset_z)
+        else:
+            mesh = _loft_mesh_from_sections(source, sections, self.offset_z)
         if mesh is None:
             self.report({"WARNING"}, "Unable to loft profiles (check vertex counts)")
             return {"CANCELLED"}
@@ -448,8 +560,7 @@ class AIHELPER_OT_loft_profiles(bpy.types.Operator):
         obj = _new_result_object(context, "AI_Loft", source)
         obj.data = mesh
         obj["ai_helper_op"] = "loft"
-        obj["ai_helper_loft_edges_a"] = list(edges_a)
-        obj["ai_helper_loft_edges_b"] = list(edges_b)
+        obj["ai_helper_loft_sections"] = [list(section) for section in sections]
         obj["ai_helper_loft_offset_z"] = float(self.offset_z)
         _apply_optional_modifiers(obj)
 
@@ -582,10 +693,14 @@ def rebuild_ops(scene):
             _apply_optional_modifiers(obj)
             rebuilt += 1
         elif op == "loft":
-            edges_a = obj.get("ai_helper_loft_edges_a") or []
-            edges_b = obj.get("ai_helper_loft_edges_b") or []
+            sections = obj.get("ai_helper_loft_sections")
             offset_z = float(obj.get("ai_helper_loft_offset_z", 0.0))
-            mesh = _loft_mesh_from_source(source, edges_a, edges_b, offset_z)
+            if isinstance(sections, list) and len(sections) >= 2:
+                mesh = _loft_mesh_from_sections(source, sections, offset_z)
+            else:
+                edges_a = obj.get("ai_helper_loft_edges_a") or []
+                edges_b = obj.get("ai_helper_loft_edges_b") or []
+                mesh = _loft_mesh_from_source(source, edges_a, edges_b, offset_z)
             if mesh is None:
                 continue
             _replace_mesh(obj, mesh)
