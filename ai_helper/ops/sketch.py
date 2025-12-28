@@ -47,6 +47,8 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.relative_mode = True
         self.axis_lock = None
         self.preview_str = ""
+        self.angle_snap_enabled = False
+        self.angle_snap_deg = 15.0
         self.snap_enabled = True
         self.snap_grid = True
         self.snap_verts = True
@@ -75,6 +77,8 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         self.snap_verts = props.snap_verts
         self.snap_mids = props.snap_mids
         self.snap_inters = props.snap_inters
+        self.angle_snap_enabled = props.angle_snap_enabled
+        self.angle_snap_deg = props.angle_snap_deg
         self.snap_radius = props.snap_radius
         self.grid_step = props.grid_step
         context.window_manager.modal_handler_add(self)
@@ -94,6 +98,12 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         if event.type == "A" and event.value == "PRESS":
             self.auto_constraints = not self.auto_constraints
             context.scene.ai_helper.auto_constraints = self.auto_constraints
+            self._set_header(context)
+            return {"RUNNING_MODAL"}
+
+        if event.type == "Q" and event.value == "PRESS":
+            self.angle_snap_enabled = not self.angle_snap_enabled
+            context.scene.ai_helper.angle_snap_enabled = self.angle_snap_enabled
             self._set_header(context)
             return {"RUNNING_MODAL"}
 
@@ -172,10 +182,11 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         auto = "AUTO" if self.auto_constraints else "MANUAL"
         snap = "SNAP" if self.snap_enabled else "FREE"
         axis = self.axis_lock if self.axis_lock else "-"
+        ang = f"{self.angle_snap_deg:g}" if self.angle_snap_enabled else "-"
         text = self.input_str if self.input_str else "<input>"
         preview = f" | {self.preview_str}" if self.preview_str else ""
         context.area.header_text_set(
-            f"Sketch Mode | {mode} | {auto} | {snap} | LOCK:{axis} | {text}{preview}"
+            f"Sketch Mode | {mode} | {auto} | {snap} | ANG:{ang} | LOCK:{axis} | {text}{preview}"
         )
 
     def _clear_header(self, context):
@@ -251,13 +262,13 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
 
     def _snap_location(self, context, location, event):
         if not self.snap_enabled or event.shift:
-            return self._apply_axis_lock(location)
+            return self._apply_angle_snap(self._apply_axis_lock(location))
 
         snapped = self._snap_to_features(context, location)
         if snapped is not None:
-            return self._apply_axis_lock(snapped)
+            return self._apply_angle_snap(self._apply_axis_lock(snapped))
 
-        return self._apply_axis_lock(self._snap_to_grid(context, location))
+        return self._apply_angle_snap(self._apply_axis_lock(self._snap_to_grid(context, location)))
 
     def _apply_axis_lock(self, location):
         if self.start is None or self.axis_lock is None:
@@ -267,6 +278,29 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         if self.axis_lock == "Y":
             return Vector((self.start.x, location.y, 0.0))
         return location
+
+    def _apply_angle_snap(self, location):
+        if self.start is None or not self.angle_snap_enabled or self.axis_lock is not None:
+            return location
+        if self.angle_snap_deg <= 0.0:
+            return location
+
+        dx = location.x - self.start.x
+        dy = location.y - self.start.y
+        length = math.hypot(dx, dy)
+        if length < 1e-8:
+            return location
+
+        step = math.radians(self.angle_snap_deg)
+        angle = math.atan2(dy, dx)
+        snapped = round(angle / step) * step
+        return Vector(
+            (
+                self.start.x + math.cos(snapped) * length,
+                self.start.y + math.sin(snapped) * length,
+                0.0,
+            )
+        )
 
     def _update_preview(self, context, event):
         if self.start is None:

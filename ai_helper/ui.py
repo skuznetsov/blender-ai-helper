@@ -127,6 +127,10 @@ class AIHELPER_PT_sketch(bpy.types.Panel):
         layout.prop(props, "hv_tolerance_deg")
         layout.separator()
         layout.prop(props, "snap_enabled")
+        layout.prop(props, "angle_snap_enabled")
+        col_angle = layout.column()
+        col_angle.enabled = props.angle_snap_enabled
+        col_angle.prop(props, "angle_snap_deg")
         col = layout.column()
         col.enabled = props.snap_enabled
         col.prop(props, "snap_grid")

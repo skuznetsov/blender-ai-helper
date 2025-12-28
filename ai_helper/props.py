@@ -69,6 +69,18 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Snap to edge intersections",
         default=True,
     )
+    angle_snap_enabled: bpy.props.BoolProperty(
+        name="Angle Snap",
+        description="Snap angles to fixed increments while drawing",
+        default=False,
+    )
+    angle_snap_deg: bpy.props.FloatProperty(
+        name="Angle Snap Deg",
+        description="Angle snap increment in degrees",
+        default=15.0,
+        min=1.0,
+        max=90.0,
+    )
     snap_radius: bpy.props.FloatProperty(
         name="Snap Radius",
         description="Snap radius in scene units",

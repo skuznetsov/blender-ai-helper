@@ -17,7 +17,7 @@
 - Click to set a start point, then type `x,y` and press Enter.
 - Default mode is REL; press Tab to toggle ABS/REL or prefix `=` for absolute.
 - Polar input: `@len<angle` (degrees).
-- Press A to toggle auto constraints; press S to toggle snapping; hold Shift to temporarily disable snapping.
+- Press A to toggle auto constraints; press S to toggle snapping; press Q to toggle angle snap; hold Shift to temporarily disable snapping.
 - Axis lock: press X or Y to lock movement to the axis (press again to clear).
 - Live preview: header shows length and angle while moving the mouse.
 - Add Circle: click Add Circle and enter center/radius in the dialog (defaults to 3D cursor).

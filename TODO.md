@@ -34,6 +34,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: user can draw line with numeric input.
   - [~] Axis lock toggle (X/Y) while drawing (needs Blender validation).
   - [~] Live length/angle preview while moving mouse (needs Blender validation).
+  - [~] Angle snap toggle (Q) with configurable increment (needs Blender validation).
 - [~] Precision coordinate edit for vertices (dialog).
   - DoD: selected vertex can be set to exact XY coordinates.
 - [~] Precision edge length edit (dialog).
