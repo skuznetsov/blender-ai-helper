@@ -11,6 +11,7 @@
 2. Enter a prompt.
 3. Click Preview to generate tool calls.
 4. Inspect the preview and click Apply.
+5. For constraints, select sketch geometry and ask for a constraint (e.g., "add horizontal constraint").
 
 ## Sketch (WIP)
 - Sketch Mode creates line segments on the XY plane.
@@ -40,6 +41,7 @@
 - Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 - 3D modifiers: select a 3D op object and use Add Shell or Add Fillet to apply Solidify/Bevel.
+- History: use Capture Snapshot and Restore in the History panel to jump between steps.
 - Auto rebuild: toggle Auto Rebuild 3D Ops in the 3D Ops panel.
 
 ## Notes
