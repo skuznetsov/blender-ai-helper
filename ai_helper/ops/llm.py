@@ -4,7 +4,7 @@ import bpy
 
 from ..core import logger
 from ..core.settings import get_prefs
-from ..llm import GrokAdapter, dispatch_tool_calls, serialize_selection
+from ..llm import GrokAdapter, dispatch_tool_calls, get_tool_schema, serialize_selection
 
 
 class AIHELPER_OT_preview_prompt(bpy.types.Operator):
@@ -26,9 +26,10 @@ class AIHELPER_OT_preview_prompt(bpy.types.Operator):
 
         adapter = GrokAdapter(adapter_path=adapter_path, mock=use_mock)
         selection = serialize_selection(context)
+        tools = get_tool_schema()
 
         try:
-            tool_calls = adapter.request_tool_calls(prompt, selection, use_mock=use_mock)
+            tool_calls = adapter.request_tool_calls(prompt, selection, tools=tools, use_mock=use_mock)
         except Exception as exc:
             logger.logger.error("Grok preview failed: %s", exc)
             self.report({"ERROR"}, f"Preview failed: {exc}")

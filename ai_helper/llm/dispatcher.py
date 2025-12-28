@@ -126,10 +126,60 @@ def _add_cube(_context, args: Dict[str, Any], preview: bool, messages: List[str]
     bpy.ops.mesh.primitive_cube_add(size=size, location=location)
 
 
+def _add_constraint(_context, args: Dict[str, Any], preview: bool, messages: List[str]) -> None:
+    kind = str(args.get("kind", "")).lower()
+    if not kind:
+        raise ValueError("Missing constraint kind")
+
+    messages.append(f"add_constraint {kind}")
+    if preview:
+        return
+
+    if kind == "distance":
+        bpy.ops.aihelper.add_distance_constraint(distance=float(args.get("distance", 0.0)))
+    elif kind == "angle":
+        bpy.ops.aihelper.add_angle_constraint(degrees=float(args.get("degrees", 90.0)))
+    elif kind == "radius":
+        bpy.ops.aihelper.add_radius_constraint(radius=float(args.get("radius", 0.0)))
+    elif kind == "horizontal":
+        bpy.ops.aihelper.add_horizontal_constraint()
+    elif kind == "vertical":
+        bpy.ops.aihelper.add_vertical_constraint()
+    elif kind == "coincident":
+        bpy.ops.aihelper.add_coincident_constraint()
+    elif kind == "midpoint":
+        bpy.ops.aihelper.add_midpoint_constraint()
+    elif kind == "equal_length":
+        bpy.ops.aihelper.add_equal_length_constraint()
+    elif kind == "concentric":
+        bpy.ops.aihelper.add_concentric_constraint()
+    elif kind == "symmetry":
+        bpy.ops.aihelper.add_symmetry_constraint()
+    elif kind == "tangent":
+        bpy.ops.aihelper.add_tangent_constraint()
+    elif kind == "parallel":
+        bpy.ops.aihelper.add_parallel_constraint()
+    elif kind == "perpendicular":
+        bpy.ops.aihelper.add_perpendicular_constraint()
+    elif kind == "fix":
+        bpy.ops.aihelper.add_fix_constraint()
+    else:
+        raise ValueError(f"Unsupported constraint kind: {kind}")
+
+
+def _solve_constraints(_context, _args: Dict[str, Any], preview: bool, messages: List[str]) -> None:
+    messages.append("solve_constraints")
+    if preview:
+        return
+    bpy.ops.aihelper.solve_constraints()
+
+
 _HANDLERS = {
     "transform_object": _transform_object,
     "rename_object": _rename_object,
     "duplicate_object": _duplicate_object,
     "delete_object": _delete_object,
     "add_cube": _add_cube,
+    "add_constraint": _add_constraint,
+    "solve_constraints": _solve_constraints,
 }

@@ -34,6 +34,11 @@ def serialize_selection(context) -> Dict[str, Any]:
                 "edges": len(obj.data.edges),
                 "faces": len(obj.data.polygons),
             }
+            if obj.name == "AI_Sketch":
+                data["selection"] = {
+                    "verts": [v.index for v in obj.data.vertices if v.select],
+                    "edges": [e.index for e in obj.data.edges if e.select],
+                }
 
         objects.append(data)
 

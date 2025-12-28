@@ -85,6 +85,9 @@ class GrokAdapter:
 
     def _mock_tool_calls(self, prompt: str) -> List[ToolCall]:
         logger.logger.info("Mock Grok response for prompt length: %d", len(prompt))
+        prompt_lower = prompt.lower()
+        if "constraint" in prompt_lower:
+            return [ToolCall(name="add_constraint", arguments={"kind": "horizontal"})]
         return [
             ToolCall(
                 name="transform_object",
