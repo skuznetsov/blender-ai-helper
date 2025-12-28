@@ -36,11 +36,11 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Live length/angle preview while moving mouse (needs Blender validation).
   - [~] Angle snap toggle (Q) with configurable increment (needs Blender validation).
   - [~] Angle snap presets (15/30/45) (needs Blender validation).
-- [~] Precision coordinate edit for vertices (dialog).
+- [x] Precision coordinate edit for vertices (dialog).
   - DoD: selected vertex can be set to exact XY coordinates.
-- [~] Precision edge length edit (dialog).
+- [x] Precision edge length edit (dialog).
   - DoD: selected edge can be set to exact length.
-- [~] Precision edge angle edit (dialog).
+- [x] Precision edge angle edit (dialog).
   - DoD: selected edge can be set to exact angle.
 - [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
@@ -58,11 +58,11 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Angle constraint add/edit (needs Blender validation).
   - [~] Radius constraint add/edit (needs Blender validation).
   - [~] Coincident constraint add (needs Blender validation).
-  - [~] Midpoint constraint add (needs Blender validation).
-  - [~] Equal length constraint add (needs Blender validation).
-  - [~] Concentric constraint add (needs Blender validation).
-  - [~] Symmetry constraint add (needs Blender validation).
-  - [~] Tangent constraint add (needs Blender validation).
+  - [x] Midpoint constraint add.
+  - [x] Equal length constraint add.
+  - [x] Concentric constraint add.
+  - [x] Symmetry constraint add.
+  - [x] Tangent constraint add.
   - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
   - [x] Auto-constraints on draw (horizontal/vertical).
   - [~] Constraint add dialogs prefill current values (needs Blender validation).
@@ -70,7 +70,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [~] Select constraint geometry from list (needs Blender validation).
   - [~] Select worst constraint from diagnostics (needs Blender validation).
   - [~] Clear diagnostics button (needs Blender validation).
-- [~] Circle tool + radius constraints (needs Blender validation).
+- [x] Circle tool + radius constraints.
   - DoD: circle can be added and radius constraints solve against it.
 
 ## 5) 3D ops (SAFE)
