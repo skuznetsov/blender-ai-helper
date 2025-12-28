@@ -46,24 +46,24 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: snap selection is stable and predictable.
 - [x] Constraint storage on sketch mesh + solver bridge.
   - DoD: constraints stored on sketch mesh and solver updates geometry.
-- [~] Dimension overlay objects (length/angle/radius) with direct edit.
+- [x] Dimension overlay objects (length/angle/radius) with direct edit.
   - DoD: editing a dimension updates geometry via solver.
   - [x] Distance labels as text objects.
   - [x] Direct edit on labels (dialog).
-  - [~] Angle labels + direct edit (needs Blender validation).
-  - [~] Radius labels + direct edit (needs Blender validation).
+  - [x] Angle labels + direct edit.
+  - [x] Radius labels + direct edit.
 - [~] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
-  - [~] Angle constraint add/edit (needs Blender validation).
-  - [~] Radius constraint add/edit (needs Blender validation).
-  - [~] Coincident constraint add (needs Blender validation).
+  - [x] Angle constraint add/edit.
+  - [x] Radius constraint add/edit.
+  - [x] Coincident constraint add.
   - [x] Midpoint constraint add.
   - [x] Equal length constraint add.
   - [x] Concentric constraint add.
   - [x] Symmetry constraint add.
   - [x] Tangent constraint add.
-  - [~] Parallel/Perpendicular constraints in panel (needs Blender validation).
+  - [x] Parallel/Perpendicular constraints in panel.
   - [x] Auto-constraints on draw (horizontal/vertical).
   - [~] Constraint add dialogs prefill current values (needs Blender validation).
   - [~] Constraint diagnostics list (needs Blender validation).

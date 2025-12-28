@@ -13,6 +13,7 @@ if ROOT not in sys.path:
 
 import ai_helper  # noqa: E402
 from ai_helper.sketch.circles import load_circles  # noqa: E402
+from ai_helper.sketch.constraints import AngleConstraint, RadiusConstraint  # noqa: E402
 from ai_helper.sketch.store import load_constraints  # noqa: E402
 
 
@@ -70,6 +71,29 @@ def select(obj, verts=(), edges=()):
     for eid in edges:
         obj.data.edges[eid].select = True
     obj.data.update()
+
+
+def edge_direction(obj, edge_index):
+    edge = obj.data.edges[edge_index]
+    v1 = obj.data.vertices[edge.vertices[0]].co
+    v2 = obj.data.vertices[edge.vertices[1]].co
+    vec = v2 - v1
+    if vec.length < 1e-8:
+        return Vector((1.0, 0.0, 0.0))
+    return vec.normalized()
+
+
+def angle_between(vec1, vec2):
+    dot = max(min(vec1.dot(vec2), 1.0), -1.0)
+    return math.degrees(math.acos(dot))
+
+
+def find_dimension_label(constraint_id, kind=None):
+    for obj in bpy.data.objects:
+        if obj.get("ai_helper_dimension_id") == constraint_id:
+            if kind is None or obj.get("ai_helper_dimension_kind") == kind:
+                return obj
+    return None
 
 
 def add_fix(obj, vid):
@@ -147,6 +171,95 @@ def test_equal_length_constraint():
     check(abs(len0 - len1) < 1e-3, "equal length constraint failed")
 
 
+def test_coincident_constraint():
+    obj = new_sketch()
+    v_indices, _ = build_mesh(obj, [(0.0, 0.0, 0.0), (1.5, 1.0, 0.0)], [])
+    select(obj, verts=[v_indices[0], v_indices[1]])
+    result = bpy.ops.aihelper.add_coincident_constraint()
+    check("FINISHED" in result, "add_coincident_constraint failed")
+    v1 = obj.data.vertices[v_indices[0]].co
+    v2 = obj.data.vertices[v_indices[1]].co
+    check((v2 - v1).length < 1e-3, "coincident constraint failed")
+
+
+def test_parallel_constraint():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(
+        obj,
+        [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 2.0, 0.0)],
+        [(0, 1), (2, 3)],
+    )
+    add_fix(obj, v_indices[0])
+    add_fix(obj, v_indices[1])
+    select(obj, edges=[e_indices[0], e_indices[1]])
+    result = bpy.ops.aihelper.add_parallel_constraint()
+    check("FINISHED" in result, "add_parallel_constraint failed")
+    d1 = edge_direction(obj, e_indices[0])
+    d2 = edge_direction(obj, e_indices[1])
+    dot = abs(d1.dot(d2))
+    check(abs(dot - 1.0) < 1e-3, "parallel constraint failed")
+
+
+def test_perpendicular_constraint():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(
+        obj,
+        [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 2.0, 0.0)],
+        [(0, 1), (2, 3)],
+    )
+    add_fix(obj, v_indices[0])
+    add_fix(obj, v_indices[1])
+    select(obj, edges=[e_indices[0], e_indices[1]])
+    result = bpy.ops.aihelper.add_perpendicular_constraint()
+    check("FINISHED" in result, "add_perpendicular_constraint failed")
+    d1 = edge_direction(obj, e_indices[0])
+    d2 = edge_direction(obj, e_indices[1])
+    dot = abs(d1.dot(d2))
+    check(dot < 1e-3, "perpendicular constraint failed")
+
+
+def test_angle_constraint_edit():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(
+        obj,
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)],
+        [(0, 1), (1, 2)],
+    )
+    add_fix(obj, v_indices[0])
+    add_fix(obj, v_indices[1])
+    select(obj, edges=[e_indices[0], e_indices[1]])
+    result = bpy.ops.aihelper.add_angle_constraint(degrees=45.0)
+    check("FINISHED" in result, "add_angle_constraint failed")
+
+    constraints = load_constraints(obj)
+    angle_constraint = next((c for c in constraints if isinstance(c, AngleConstraint)), None)
+    check(angle_constraint is not None, "angle constraint missing")
+    label = find_dimension_label(angle_constraint.id, "angle")
+    check(label is not None, "angle dimension label missing")
+
+    v0 = obj.data.vertices[v_indices[0]].co
+    v1 = obj.data.vertices[v_indices[1]].co
+    v2 = obj.data.vertices[v_indices[2]].co
+    angle = angle_between(v0 - v1, v2 - v1)
+    check(abs(angle - 45.0) < 1e-2, "angle constraint failed")
+
+    result = bpy.ops.aihelper.edit_selected_dimension(
+        constraint_id=angle_constraint.id,
+        kind="angle",
+        degrees=60.0,
+    )
+    check("FINISHED" in result, "edit_selected_dimension angle failed")
+    constraints = load_constraints(obj)
+    angle_constraint = next((c for c in constraints if isinstance(c, AngleConstraint)), None)
+    check(angle_constraint is not None, "angle constraint missing after edit")
+    check(abs(angle_constraint.degrees - 60.0) < 1e-3, "angle constraint not updated")
+    v0 = obj.data.vertices[v_indices[0]].co
+    v1 = obj.data.vertices[v_indices[1]].co
+    v2 = obj.data.vertices[v_indices[2]].co
+    angle = angle_between(v0 - v1, v2 - v1)
+    check(abs(angle - 60.0) < 1e-1, "angle constraint edit failed")
+
+
 def test_symmetry_constraint():
     obj = new_sketch()
     v_indices, e_indices = build_mesh(
@@ -186,6 +299,25 @@ def test_circle_constraints():
     center2 = obj.data.vertices[int(circles[1]["center"])].co
     check((center1 - center2).length < 1e-3, "concentric constraint failed")
 
+    constraints = load_constraints(obj)
+    radius_constraint = next((c for c in constraints if isinstance(c, RadiusConstraint)), None)
+    check(radius_constraint is not None, "radius constraint missing")
+    label = find_dimension_label(radius_constraint.id, "radius")
+    check(label is not None, "radius dimension label missing")
+    result = bpy.ops.aihelper.edit_selected_dimension(
+        constraint_id=radius_constraint.id,
+        kind="radius",
+        radius=2.0,
+    )
+    check("FINISHED" in result, "edit_selected_dimension radius failed")
+    constraints = load_constraints(obj)
+    radius_constraint = next((c for c in constraints if isinstance(c, RadiusConstraint)), None)
+    check(radius_constraint is not None, "radius constraint missing after edit")
+    check(abs(radius_constraint.radius - 2.0) < 1e-3, "radius constraint not updated")
+    center = obj.data.vertices[int(circles[0]["center"])].co
+    v = obj.data.vertices[int(circles[0]["verts"][0])].co
+    check(abs((v - center).length - 2.0) < 1e-2, "radius edit failed")
+
 
 def test_tangent_constraint():
     obj = new_sketch()
@@ -222,6 +354,10 @@ def run():
     test_precision_edge_angle()
     test_midpoint_constraint()
     test_equal_length_constraint()
+    test_coincident_constraint()
+    test_parallel_constraint()
+    test_perpendicular_constraint()
+    test_angle_constraint_edit()
     test_symmetry_constraint()
     test_circle_constraints()
     test_tangent_constraint()
