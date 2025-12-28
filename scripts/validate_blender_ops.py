@@ -786,34 +786,36 @@ def test_sweep_profile():
         tag="profile",
     )
     check("FINISHED" in result, "add_rectangle failed for sweep profile")
-    result = bpy.ops.aihelper.add_line(
-        start_x=0.0,
-        start_y=0.0,
-        end_x=2.0,
-        end_y=0.0,
+    result = bpy.ops.aihelper.add_polyline(
+        points="0.0,0.0; 2.0,0.0; 2.0,2.0",
         auto_constraints=False,
         tag="path",
     )
-    check("FINISHED" in result, "add_line failed for sweep path")
+    check("FINISHED" in result, "add_polyline failed for sweep path")
     result = bpy.ops.aihelper.sweep_profile(profile_tag="profile", path_tag="path")
     check("FINISHED" in result, "sweep_profile failed")
     sweep_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "sweep"), None)
     check(sweep_obj is not None, "sweep object missing")
-    max_x = max(v.co.x for v in sweep_obj.data.vertices)
-    check(abs(max_x - 3.0) < 1e-3, "sweep distance incorrect")
+    coords = [v.co for v in sweep_obj.data.vertices]
+    max_x = max(c.x for c in coords)
+    max_y = max(c.y for c in coords)
+    max_z = max(c.z for c in coords)
+    check(max_x > 2.5, "sweep did not follow path in X")
+    check(max_y >= 2.0, "sweep did not follow path in Y")
+    check(max_z > 0.1, "sweep did not lift profile into Z")
 
     tags = load_tags(obj)
     path_entry = tags.get("path", {})
     edge_ids = [int(e) for e in path_entry.get("edges", [])]
     check(edge_ids, "sweep path edge missing")
-    edge = obj.data.edges[edge_ids[0]]
-    end_vertex = obj.data.vertices[edge.vertices[1]]
-    end_vertex.co.x = 4.0
+    vert_ids = {vid for eid in edge_ids for vid in obj.data.edges[eid].vertices}
+    end_vertex = max((obj.data.vertices[vid] for vid in vert_ids), key=lambda v: v.co.y)
+    end_vertex.co.x = 3.0
     obj.data.update()
     result = bpy.ops.aihelper.rebuild_3d_ops()
     check("FINISHED" in result, "rebuild_3d_ops failed for sweep")
-    max_x = max(v.co.x for v in sweep_obj.data.vertices)
-    check(abs(max_x - 5.0) < 1e-3, "sweep rebuild incorrect")
+    new_max_x = max(v.co.x for v in sweep_obj.data.vertices)
+    check(new_max_x > max_x + 0.5, "sweep rebuild incorrect")
 
 
 def test_history_snapshot_restore():

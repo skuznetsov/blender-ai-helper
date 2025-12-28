@@ -262,3 +262,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Loft between two tagged profiles (matching vertex counts).
   - [x] Sweep tagged profile along tagged path edge.
   - [x] Rebuild support + tests.
+
+## 35) Curved sweep (CAUTION)
+- [x] Sweep profile along polyline path with twist control.
+  - DoD: `blender -b --python scripts/validate_blender_ops.py` passes sweep tests.

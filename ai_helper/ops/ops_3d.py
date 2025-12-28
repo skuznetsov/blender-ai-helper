@@ -2,7 +2,7 @@ import math
 
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 from ..sketch.tags import resolve_tags
 
@@ -226,36 +226,75 @@ def _loft_mesh_from_source(source, edges_a, edges_b, offset_z):
     return mesh
 
 
-def _path_vector_from_edges(source, edge_indices):
+def _path_vertices_from_edges(source, edge_indices):
     order, closed = _ordered_vertices_from_edges(source, edge_indices)
     if not order or closed:
         return None
-    start = source.data.vertices[order[0]].co
-    end = source.data.vertices[order[-1]].co
-    vec = end - start
-    if vec.length < 1e-8:
-        return None
-    return vec
+    return order
 
 
-def _sweep_mesh_from_source(source, profile_edges, path_edges):
-    vec = _path_vector_from_edges(source, path_edges)
-    if vec is None:
+def _sweep_mesh_from_source(source, profile_edges, path_edges, twist_deg=0.0):
+    profile_order, profile_closed = _ordered_vertices_from_edges(source, profile_edges)
+    if not profile_order:
         return None
+
+    path_order = _path_vertices_from_edges(source, path_edges)
+    if not path_order or len(path_order) < 2:
+        return None
+
+    profile_coords = [source.data.vertices[i].co.copy() for i in profile_order]
+    center = sum((coord for coord in profile_coords), Vector()) / len(profile_coords)
+    local_coords = [coord - center for coord in profile_coords]
+    path_coords = [source.data.vertices[i].co.copy() for i in path_order]
+
+    up = Vector((0.0, 0.0, 1.0))
+    twist_total = math.radians(twist_deg)
+    section_count = len(path_coords)
 
     mesh = bpy.data.meshes.new("AI_Sweep")
     bm = bmesh.new()
-    bm.from_mesh(source.data)
-    bm.edges.ensure_lookup_table()
+    sections = []
 
-    edges = [bm.edges[i] for i in profile_edges if 0 <= i < len(bm.edges)]
-    if not edges:
-        bm.free()
-        return None
+    for idx, pos in enumerate(path_coords):
+        if idx < section_count - 1:
+            tangent = path_coords[idx + 1] - pos
+        else:
+            tangent = pos - path_coords[idx - 1]
+        if tangent.length < 1e-8:
+            bm.free()
+            return None
+        tangent.normalize()
+        normal = up.cross(tangent)
+        if normal.length < 1e-8:
+            normal = Vector((1.0, 0.0, 0.0))
+        else:
+            normal.normalize()
+        binormal = tangent.cross(normal)
 
-    res = bmesh.ops.extrude_edge_only(bm, edges=edges)
-    extruded = [elem for elem in res["geom"] if isinstance(elem, bmesh.types.BMVert)]
-    bmesh.ops.translate(bm, verts=extruded, vec=vec)
+        if section_count > 1:
+            twist = twist_total * (idx / (section_count - 1))
+        else:
+            twist = 0.0
+        if abs(twist) > 1e-8:
+            rot = Matrix.Rotation(twist, 3, tangent)
+            normal = rot @ normal
+            binormal = rot @ binormal
+
+        section = []
+        for coord in local_coords:
+            offset = normal * coord.x + binormal * coord.y
+            section.append(bm.verts.new(pos + offset))
+        sections.append(section)
+
+    bm.verts.ensure_lookup_table()
+    count = len(local_coords)
+    for idx in range(len(sections) - 1):
+        for j in range(count if profile_closed else count - 1):
+            k = (j + 1) % count
+            try:
+                bm.faces.new((sections[idx][j], sections[idx][k], sections[idx + 1][k], sections[idx + 1][j]))
+            except ValueError:
+                pass
 
     bm.to_mesh(mesh)
     bm.free()
@@ -434,6 +473,11 @@ class AIHELPER_OT_sweep_profile(bpy.types.Operator):
         description="Tag for the sweep path edges",
         default="",
     )
+    twist_deg: bpy.props.FloatProperty(
+        name="Twist",
+        description="Twist angle along the path (degrees)",
+        default=0.0,
+    )
 
     def execute(self, context):
         source = _get_sketch_object(context)
@@ -441,21 +485,30 @@ class AIHELPER_OT_sweep_profile(bpy.types.Operator):
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
+        profile_edges = []
+        path_edges = []
         profile_tag = self.profile_tag.strip()
         path_tag = self.path_tag.strip()
-        if not profile_tag or not path_tag:
-            self.report({"WARNING"}, "Profile and path tags are required")
-            return {"CANCELLED"}
+        if profile_tag and path_tag:
+            _, profile_edges = resolve_tags(source, [profile_tag], prefer_center=False)
+            _, path_edges = resolve_tags(source, [path_tag], prefer_center=False)
+            profile_edges = sorted(set(profile_edges))
+            path_edges = sorted(set(path_edges))
+        else:
+            selected = [e.index for e in source.data.edges if e.select]
+            components = _edge_components(source, selected)
+            for component in components:
+                _, closed = _ordered_vertices_from_edges(source, component)
+                if closed:
+                    profile_edges = component
+                else:
+                    path_edges = component
 
-        _, profile_edges = resolve_tags(source, [profile_tag], prefer_center=False)
-        _, path_edges = resolve_tags(source, [path_tag], prefer_center=False)
-        profile_edges = sorted(set(profile_edges))
-        path_edges = sorted(set(path_edges))
         if not profile_edges or not path_edges:
-            self.report({"WARNING"}, "Profile/path tags have no edges")
+            self.report({"WARNING"}, "Select profile+path edges or provide tags")
             return {"CANCELLED"}
 
-        mesh = _sweep_mesh_from_source(source, profile_edges, path_edges)
+        mesh = _sweep_mesh_from_source(source, profile_edges, path_edges, twist_deg=self.twist_deg)
         if mesh is None:
             self.report({"WARNING"}, "Unable to sweep profile")
             return {"CANCELLED"}
@@ -465,6 +518,7 @@ class AIHELPER_OT_sweep_profile(bpy.types.Operator):
         obj["ai_helper_op"] = "sweep"
         obj["ai_helper_sweep_profile_edges"] = list(profile_edges)
         obj["ai_helper_sweep_path_edges"] = list(path_edges)
+        obj["ai_helper_sweep_twist_deg"] = float(self.twist_deg)
         _apply_optional_modifiers(obj)
 
         self.report({"INFO"}, "Sweep created")
@@ -540,7 +594,8 @@ def rebuild_ops(scene):
         elif op == "sweep":
             profile_edges = obj.get("ai_helper_sweep_profile_edges") or []
             path_edges = obj.get("ai_helper_sweep_path_edges") or []
-            mesh = _sweep_mesh_from_source(source, profile_edges, path_edges)
+            twist_deg = float(obj.get("ai_helper_sweep_twist_deg", 0.0))
+            mesh = _sweep_mesh_from_source(source, profile_edges, path_edges, twist_deg=twist_deg)
             if mesh is None:
                 continue
             _replace_mesh(obj, mesh)

@@ -83,6 +83,7 @@ Sketch Entities + Constraints
   -> History Snapshots + LLM Preview
 
 ## Future Extensions
+- Curved sweep along polylines with twist control.
 - Multi-section Loft/Sweep profiles.
 - Constraint conflict visualization (highlight entities).
 - Assembly constraints between objects.
