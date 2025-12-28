@@ -10,6 +10,14 @@ _LAST_REBUILD = 0.0
 _MIN_REBUILD_INTERVAL = 0.1
 
 
+def _update_triggers_rebuild(update, obj) -> bool:
+    if getattr(update, "is_updated_geometry", False) or getattr(update, "is_updated_data", False):
+        return True
+    if getattr(obj, "is_updated_geometry", False) or getattr(obj, "is_updated_data", False):
+        return True
+    return False
+
+
 def _should_rebuild(scene, depsgraph) -> bool:
     for update in depsgraph.updates:
         obj = getattr(update, "id", None)
@@ -17,7 +25,7 @@ def _should_rebuild(scene, depsgraph) -> bool:
             continue
         if obj.name != "AI_Sketch":
             continue
-        if obj.is_updated_geometry or obj.is_updated_data:
+        if _update_triggers_rebuild(update, obj):
             return ops_3d.has_ops(scene, obj.name)
     return False
 

@@ -434,6 +434,8 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         edge = bm.edges.new((v1, v2))
         bm.verts.ensure_lookup_table()
         bm.edges.ensure_lookup_table()
+        bm.verts.index_update()
+        bm.edges.index_update()
         edge_index = edge.index
 
         bm.to_mesh(obj.data)
@@ -523,6 +525,7 @@ class AIHELPER_OT_add_circle(bpy.types.Operator):
         )
         center_vert = bm.verts.new((self.center_x, self.center_y, 0.0))
         bm.verts.ensure_lookup_table()
+        bm.verts.index_update()
         circle_verts = result.get("verts", [])
         circle_ids = [str(v.index) for v in circle_verts]
         center_id = str(center_vert.index)
