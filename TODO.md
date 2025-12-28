@@ -29,20 +29,20 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: query_radius / nearest returns correct points in tests.
 
 ## 4) Sketch UX (CAUTION)
-- [~] Sketch Mode modal operator with command bar input.
+- [x] Sketch Mode modal operator with command bar input.
   - Input formats: `x,y`, `@len<angle`, `dx,dy`.
   - DoD: user can draw line with numeric input.
-  - [~] Axis lock toggle (X/Y) while drawing (needs Blender validation).
-  - [~] Live length/angle preview while moving mouse (needs Blender validation).
-  - [~] Angle snap toggle (Q) with configurable increment (needs Blender validation).
-  - [~] Angle snap presets (15/30/45) (needs Blender validation).
+  - [x] Axis lock toggle (X/Y) while drawing.
+  - [x] Live length/angle preview while moving mouse.
+  - [x] Angle snap toggle (Q) with configurable increment.
+  - [x] Angle snap presets (15/30/45).
 - [x] Precision coordinate edit for vertices (dialog).
   - DoD: selected vertex can be set to exact XY coordinates.
 - [x] Precision edge length edit (dialog).
   - DoD: selected edge can be set to exact length.
 - [x] Precision edge angle edit (dialog).
   - DoD: selected edge can be set to exact angle.
-- [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
+- [x] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
 - [x] Constraint storage on sketch mesh + solver bridge.
   - DoD: constraints stored on sketch mesh and solver updates geometry.
@@ -65,7 +65,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Tangent constraint add.
   - [x] Parallel/Perpendicular constraints in panel.
   - [x] Auto-constraints on draw (horizontal/vertical).
-  - [~] Constraint add dialogs prefill current values (needs Blender validation).
+  - [x] Constraint add dialogs prefill current values.
   - [x] Constraint diagnostics list.
   - [x] Select constraint geometry from list.
   - [x] Select worst constraint from diagnostics.

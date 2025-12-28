@@ -16,6 +16,19 @@ import ai_helper  # noqa: E402
 from ai_helper.sketch.circles import load_circles  # noqa: E402
 from ai_helper.sketch.constraints import AngleConstraint, RadiusConstraint  # noqa: E402
 from ai_helper.sketch.store import load_constraints  # noqa: E402
+from ai_helper.ops.constraints import (  # noqa: E402
+    _angle_targets,
+    _circle_current_radius,
+    _distance_targets,
+)
+from ai_helper.ops.sketch import (  # noqa: E402
+    apply_angle_snap,
+    apply_axis_lock,
+    format_preview,
+    parse_input,
+    snap_to_features,
+    snap_to_grid,
+)
 
 
 def check(condition, message):
@@ -99,6 +112,11 @@ def find_dimension_label(constraint_id, kind=None):
 
 def selected_vertex_indices(obj):
     return [v.index for v in obj.data.vertices if v.select]
+
+
+def assert_vec_close(vec, expected, tol=1e-3):
+    check(abs(vec.x - expected[0]) < tol, f"vec.x {vec.x} != {expected[0]}")
+    check(abs(vec.y - expected[1]) < tol, f"vec.y {vec.y} != {expected[1]}")
 
 
 def add_fix(obj, vid):
@@ -263,6 +281,132 @@ def test_angle_constraint_edit():
     v2 = obj.data.vertices[v_indices[2]].co
     angle = angle_between(v0 - v1, v2 - v1)
     check(abs(angle - 60.0) < 1e-1, "angle constraint edit failed")
+
+
+def test_sketch_input_and_preview():
+    start = Vector((1.0, 2.0, 0.0))
+    assert_vec_close(parse_input("1,2", start, True), (2.0, 4.0))
+    assert_vec_close(parse_input("=3,4", start, True), (3.0, 4.0))
+    assert_vec_close(parse_input("@2<90", start, True), (1.0, 4.0))
+    check(parse_input("bad", start, True) is None, "invalid input should return None")
+
+    start = Vector((0.0, 0.0, 0.0))
+    point = Vector((3.0, 4.0, 0.0))
+    preview = format_preview(start, point)
+    expected_angle = (math.degrees(math.atan2(4.0, 3.0)) + 360.0) % 360.0
+    check(preview.startswith("len=5.000"), "preview length incorrect")
+    check(f"ang={expected_angle:.1f}" in preview, "preview angle incorrect")
+
+
+def test_sketch_snapping():
+    snap_radius = 1.0
+    grid_step = 1.0
+    scale_length = bpy.context.scene.unit_settings.scale_length
+
+    assert_vec_close(
+        snap_to_grid(Vector((0.49, 0.49, 0.0)), grid_step, scale_length, True),
+        (0.0, 0.0),
+    )
+    assert_vec_close(
+        snap_to_grid(Vector((0.6, 0.6, 0.0)), grid_step, scale_length, True),
+        (1.0, 1.0),
+    )
+
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)], [(0, 1)])
+    snapped = snap_to_features(
+        Vector((1.8, 0.2, 0.0)),
+        obj,
+        snap_radius,
+        scale_length,
+        True,
+        False,
+        False,
+    )
+    check(snapped is not None, "vertex snap missing")
+    assert_vec_close(snapped, (2.0, 0.0))
+
+    snapped = snap_to_features(
+        Vector((1.0, 0.2, 0.0)),
+        obj,
+        snap_radius,
+        scale_length,
+        False,
+        True,
+        False,
+    )
+    check(snapped is not None, "midpoint snap missing")
+    assert_vec_close(snapped, (1.0, 0.0))
+
+    obj = new_sketch()
+    build_mesh(
+        obj,
+        [(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 1.0, 0.0)],
+        [(0, 1), (2, 3)],
+    )
+    snapped = snap_to_features(
+        Vector((0.1, 0.1, 0.0)),
+        obj,
+        snap_radius,
+        scale_length,
+        False,
+        False,
+        True,
+    )
+    check(snapped is not None, "intersection snap missing")
+    assert_vec_close(snapped, (0.0, 0.0))
+
+
+def test_sketch_axis_lock_and_angle_snap():
+    start = Vector((1.0, 2.0, 0.0))
+    locked = apply_axis_lock(Vector((5.0, 7.0, 0.0)), start, "X")
+    assert_vec_close(locked, (5.0, 2.0))
+    locked = apply_axis_lock(Vector((5.0, 7.0, 0.0)), start, "Y")
+    assert_vec_close(locked, (1.0, 7.0))
+
+    start = Vector((0.0, 0.0, 0.0))
+    angle = math.radians(20.0)
+    location = Vector((math.cos(angle) * 2.0, math.sin(angle) * 2.0, 0.0))
+    snapped = apply_angle_snap(location, start, True, 45.0, None)
+    check(abs(snapped.y) < 1e-3, "angle snap failed")
+
+    props = bpy.context.scene.ai_helper
+    props.angle_snap_deg = 15.0
+    props.angle_snap_enabled = False
+    result = bpy.ops.aihelper.set_angle_snap_preset(angle=30.0, enable=True)
+    check("FINISHED" in result, "angle snap preset failed")
+    check(abs(props.angle_snap_deg - 30.0) < 1e-3, "angle snap preset not set")
+    check(props.angle_snap_enabled is True, "angle snap preset did not enable")
+
+
+def test_constraint_dialog_prefill():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(obj, [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)], [(0, 1)])
+    select(obj, edges=[e_indices[0]])
+    targets = _distance_targets(obj)
+    check(targets is not None, "distance targets missing")
+    v1, v2 = targets
+    check(abs((v2.co - v1.co).length - 2.0) < 1e-3, "distance prefill incorrect")
+
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(
+        obj,
+        [(1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.5, 0.8660254, 0.0)],
+        [(0, 1), (1, 2)],
+    )
+    select(obj, edges=[e_indices[0], e_indices[1]])
+    targets = _angle_targets(obj)
+    check(targets is not None, "angle targets missing")
+    _p1, _vertex, _p2, angle_deg = targets
+    check(abs(angle_deg - 60.0) < 1e-1, "angle prefill incorrect")
+
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_circle(radius=1.5, segments=16, center_x=0.0, center_y=0.0)
+    check("FINISHED" in result, "add_circle failed for radius prefill")
+    circles = load_circles(obj)
+    select(obj, verts=[int(circles[0]["verts"][0])])
+    radius = _circle_current_radius(obj, circles[0])
+    check(radius is not None and abs(radius - 1.5) < 1e-3, "radius prefill incorrect")
 
 
 def test_symmetry_constraint():
@@ -469,6 +613,10 @@ def run():
     test_parallel_constraint()
     test_perpendicular_constraint()
     test_angle_constraint_edit()
+    test_sketch_input_and_preview()
+    test_sketch_snapping()
+    test_sketch_axis_lock_and_angle_snap()
+    test_constraint_dialog_prefill()
     test_symmetry_constraint()
     test_circle_constraints()
     test_tangent_constraint()
