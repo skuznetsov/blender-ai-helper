@@ -741,6 +741,81 @@ def test_shell_and_bevel_modifiers():
     check(extrude_obj.modifiers.get("AI_Bevel") is None, "bevel modifier not removed")
 
 
+def test_loft_profiles():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_rectangle(
+        width=2.0,
+        height=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile_a",
+    )
+    check("FINISHED" in result, "add_rectangle failed for loft A")
+    result = bpy.ops.aihelper.add_rectangle(
+        width=1.0,
+        height=0.5,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile_b",
+    )
+    check("FINISHED" in result, "add_rectangle failed for loft B")
+    result = bpy.ops.aihelper.loft_profiles(profile_a_tag="profile_a", profile_b_tag="profile_b", offset_z=2.0)
+    check("FINISHED" in result, "loft_profiles failed")
+    loft_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "loft"), None)
+    check(loft_obj is not None, "loft object missing")
+    max_z = max(v.co.z for v in loft_obj.data.vertices)
+    check(abs(max_z - 2.0) < 1e-3, "loft height incorrect")
+
+    loft_obj["ai_helper_loft_offset_z"] = 3.0
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for loft")
+    max_z = max(v.co.z for v in loft_obj.data.vertices)
+    check(abs(max_z - 3.0) < 1e-3, "loft rebuild incorrect")
+
+
+def test_sweep_profile():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_rectangle(
+        width=2.0,
+        height=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+        tag="profile",
+    )
+    check("FINISHED" in result, "add_rectangle failed for sweep profile")
+    result = bpy.ops.aihelper.add_line(
+        start_x=0.0,
+        start_y=0.0,
+        end_x=2.0,
+        end_y=0.0,
+        auto_constraints=False,
+        tag="path",
+    )
+    check("FINISHED" in result, "add_line failed for sweep path")
+    result = bpy.ops.aihelper.sweep_profile(profile_tag="profile", path_tag="path")
+    check("FINISHED" in result, "sweep_profile failed")
+    sweep_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "sweep"), None)
+    check(sweep_obj is not None, "sweep object missing")
+    max_x = max(v.co.x for v in sweep_obj.data.vertices)
+    check(abs(max_x - 3.0) < 1e-3, "sweep distance incorrect")
+
+    tags = load_tags(obj)
+    path_entry = tags.get("path", {})
+    edge_ids = [int(e) for e in path_entry.get("edges", [])]
+    check(edge_ids, "sweep path edge missing")
+    edge = obj.data.edges[edge_ids[0]]
+    end_vertex = obj.data.vertices[edge.vertices[1]]
+    end_vertex.co.x = 4.0
+    obj.data.update()
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for sweep")
+    max_x = max(v.co.x for v in sweep_obj.data.vertices)
+    check(abs(max_x - 5.0) < 1e-3, "sweep rebuild incorrect")
+
+
 def test_history_snapshot_restore():
     obj = new_sketch()
     build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
@@ -1173,6 +1248,8 @@ def run():
     test_extrude_rebuild()
     test_revolve_rebuild()
     test_shell_and_bevel_modifiers()
+    test_loft_profiles()
+    test_sweep_profile()
     test_extrude_selection()
     test_history_snapshot_restore()
     test_llm_auto_constraints()

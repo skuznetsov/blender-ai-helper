@@ -51,6 +51,8 @@
 - Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
 - Extrude uses selected sketch edges when available (toggle via the Use Selection option).
+- Loft: tag two profile edge sets and run Loft Profiles (use Offset Z if profiles are coplanar).
+- Sweep: tag profile edges and a path edge, then run Sweep Profile (straight sweep along the path edge direction).
 - 3D modifiers: select a 3D op object and use Add Shell or Add Fillet to apply Solidify/Bevel.
 - History: use Capture Snapshot and Restore in the History panel to jump between steps.
 - Auto rebuild: toggle Auto Rebuild 3D Ops in the 3D Ops panel.

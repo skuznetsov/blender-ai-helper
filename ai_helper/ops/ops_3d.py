@@ -2,6 +2,9 @@ import math
 
 import bpy
 import bmesh
+from mathutils import Vector
+
+from ..sketch.tags import resolve_tags
 
 _SHELL_MOD = "AI_Shell"
 _BEVEL_MOD = "AI_Bevel"
@@ -100,6 +103,166 @@ def _extrude_mesh_from_source(source, distance: float, edge_indices=None):
     return mesh
 
 
+def _edge_components(source, edge_indices):
+    edges = []
+    for eid in edge_indices:
+        if 0 <= eid < len(source.data.edges):
+            edge = source.data.edges[eid]
+            edges.append((eid, edge.vertices[0], edge.vertices[1]))
+    if not edges:
+        return []
+
+    vert_to_edges = {}
+    for eid, v1, v2 in edges:
+        vert_to_edges.setdefault(v1, set()).add(eid)
+        vert_to_edges.setdefault(v2, set()).add(eid)
+
+    edge_lookup = {eid: (v1, v2) for eid, v1, v2 in edges}
+    remaining = set(edge_lookup.keys())
+    components = []
+    while remaining:
+        start = next(iter(remaining))
+        stack = [start]
+        component = set()
+        while stack:
+            current = stack.pop()
+            if current not in remaining:
+                continue
+            remaining.remove(current)
+            component.add(current)
+            v1, v2 = edge_lookup[current]
+            for v in (v1, v2):
+                for neighbor in vert_to_edges.get(v, set()):
+                    if neighbor in remaining:
+                        stack.append(neighbor)
+        components.append(sorted(component))
+    return components
+
+
+def _ordered_vertices_from_edges(source, edge_indices):
+    adjacency = {}
+    for eid in edge_indices:
+        if eid < 0 or eid >= len(source.data.edges):
+            continue
+        edge = source.data.edges[eid]
+        v1, v2 = edge.vertices
+        adjacency.setdefault(v1, []).append(v2)
+        adjacency.setdefault(v2, []).append(v1)
+
+    if not adjacency:
+        return None, None
+
+    deg1 = [v for v, neighbors in adjacency.items() if len(neighbors) == 1]
+    closed = False
+    if deg1:
+        start = min(deg1)
+    else:
+        if any(len(neighbors) != 2 for neighbors in adjacency.values()):
+            return None, None
+        closed = True
+        start = min(adjacency.keys())
+
+    order = [start]
+    prev = None
+    curr = start
+    while True:
+        neighbors = adjacency.get(curr, [])
+        next_candidates = [n for n in neighbors if n != prev]
+        if not next_candidates:
+            break
+        next_v = min(next_candidates)
+        if closed and next_v == start:
+            break
+        if next_v in order:
+            break
+        order.append(next_v)
+        prev, curr = curr, next_v
+        if len(order) > len(adjacency):
+            break
+
+    if len(order) != len(adjacency):
+        return None, None
+    return order, closed
+
+
+def _loft_mesh_from_source(source, edges_a, edges_b, offset_z):
+    order_a, closed_a = _ordered_vertices_from_edges(source, edges_a)
+    order_b, closed_b = _ordered_vertices_from_edges(source, edges_b)
+    if not order_a or not order_b:
+        return None
+    if len(order_a) != len(order_b):
+        return None
+    if closed_a != closed_b:
+        return None
+
+    coords_a = [source.data.vertices[i].co.copy() for i in order_a]
+    coords_b = [source.data.vertices[i].co.copy() for i in order_b]
+    avg_z_a = sum(coord.z for coord in coords_a) / len(coords_a)
+    avg_z_b = sum(coord.z for coord in coords_b) / len(coords_b)
+    if abs(avg_z_a - avg_z_b) < 1e-6 and abs(offset_z) > 1e-6:
+        coords_b = [Vector((c.x, c.y, c.z + offset_z)) for c in coords_b]
+
+    mesh = bpy.data.meshes.new("AI_Loft")
+    bm = bmesh.new()
+    verts_a = [bm.verts.new(coord) for coord in coords_a]
+    verts_b = [bm.verts.new(coord) for coord in coords_b]
+    bm.verts.ensure_lookup_table()
+
+    count = len(verts_a)
+    if closed_a:
+        pairs = [(i, (i + 1) % count) for i in range(count)]
+    else:
+        pairs = [(i, i + 1) for i in range(count - 1)]
+
+    for i, j in pairs:
+        try:
+            bm.faces.new((verts_a[i], verts_a[j], verts_b[j], verts_b[i]))
+        except ValueError:
+            pass
+
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return mesh
+
+
+def _path_vector_from_edges(source, edge_indices):
+    order, closed = _ordered_vertices_from_edges(source, edge_indices)
+    if not order or closed:
+        return None
+    start = source.data.vertices[order[0]].co
+    end = source.data.vertices[order[-1]].co
+    vec = end - start
+    if vec.length < 1e-8:
+        return None
+    return vec
+
+
+def _sweep_mesh_from_source(source, profile_edges, path_edges):
+    vec = _path_vector_from_edges(source, path_edges)
+    if vec is None:
+        return None
+
+    mesh = bpy.data.meshes.new("AI_Sweep")
+    bm = bmesh.new()
+    bm.from_mesh(source.data)
+    bm.edges.ensure_lookup_table()
+
+    edges = [bm.edges[i] for i in profile_edges if 0 <= i < len(bm.edges)]
+    if not edges:
+        bm.free()
+        return None
+
+    res = bmesh.ops.extrude_edge_only(bm, edges=edges)
+    extruded = [elem for elem in res["geom"] if isinstance(elem, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, verts=extruded, vec=vec)
+
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return mesh
+
+
 class AIHELPER_OT_extrude_sketch(bpy.types.Operator):
     bl_idname = "aihelper.extrude_sketch"
     bl_label = "Extrude Sketch"
@@ -191,6 +354,123 @@ class AIHELPER_OT_revolve_sketch(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_loft_profiles(bpy.types.Operator):
+    bl_idname = "aihelper.loft_profiles"
+    bl_label = "Loft Profiles"
+    bl_description = "Loft between two profile edge sets"
+    bl_options = {"REGISTER", "UNDO"}
+
+    profile_a_tag: bpy.props.StringProperty(
+        name="Profile A Tag",
+        description="Tag for the first profile edges",
+        default="",
+    )
+    profile_b_tag: bpy.props.StringProperty(
+        name="Profile B Tag",
+        description="Tag for the second profile edges",
+        default="",
+    )
+    offset_z: bpy.props.FloatProperty(
+        name="Offset Z",
+        description="Offset the second profile along Z when coplanar",
+        default=1.0,
+    )
+
+    def execute(self, context):
+        source = _get_sketch_object(context)
+        if source is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges_a = []
+        edges_b = []
+        tag_a = self.profile_a_tag.strip()
+        tag_b = self.profile_b_tag.strip()
+        if tag_a and tag_b:
+            _, edges_a = resolve_tags(source, [tag_a], prefer_center=False)
+            _, edges_b = resolve_tags(source, [tag_b], prefer_center=False)
+        else:
+            selected = [e.index for e in source.data.edges if e.select]
+            components = _edge_components(source, selected)
+            if len(components) >= 2:
+                edges_a, edges_b = components[0], components[1]
+
+        edges_a = sorted(set(edges_a))
+        edges_b = sorted(set(edges_b))
+        if not edges_a or not edges_b:
+            self.report({"WARNING"}, "Select two profiles or provide tags")
+            return {"CANCELLED"}
+
+        mesh = _loft_mesh_from_source(source, edges_a, edges_b, self.offset_z)
+        if mesh is None:
+            self.report({"WARNING"}, "Unable to loft profiles (check vertex counts)")
+            return {"CANCELLED"}
+
+        obj = _new_result_object(context, "AI_Loft", source)
+        obj.data = mesh
+        obj["ai_helper_op"] = "loft"
+        obj["ai_helper_loft_edges_a"] = list(edges_a)
+        obj["ai_helper_loft_edges_b"] = list(edges_b)
+        obj["ai_helper_loft_offset_z"] = float(self.offset_z)
+        _apply_optional_modifiers(obj)
+
+        self.report({"INFO"}, "Loft created")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_sweep_profile(bpy.types.Operator):
+    bl_idname = "aihelper.sweep_profile"
+    bl_label = "Sweep Profile"
+    bl_description = "Sweep profile edges along a path edge"
+    bl_options = {"REGISTER", "UNDO"}
+
+    profile_tag: bpy.props.StringProperty(
+        name="Profile Tag",
+        description="Tag for the profile edges",
+        default="",
+    )
+    path_tag: bpy.props.StringProperty(
+        name="Path Tag",
+        description="Tag for the sweep path edges",
+        default="",
+    )
+
+    def execute(self, context):
+        source = _get_sketch_object(context)
+        if source is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        profile_tag = self.profile_tag.strip()
+        path_tag = self.path_tag.strip()
+        if not profile_tag or not path_tag:
+            self.report({"WARNING"}, "Profile and path tags are required")
+            return {"CANCELLED"}
+
+        _, profile_edges = resolve_tags(source, [profile_tag], prefer_center=False)
+        _, path_edges = resolve_tags(source, [path_tag], prefer_center=False)
+        profile_edges = sorted(set(profile_edges))
+        path_edges = sorted(set(path_edges))
+        if not profile_edges or not path_edges:
+            self.report({"WARNING"}, "Profile/path tags have no edges")
+            return {"CANCELLED"}
+
+        mesh = _sweep_mesh_from_source(source, profile_edges, path_edges)
+        if mesh is None:
+            self.report({"WARNING"}, "Unable to sweep profile")
+            return {"CANCELLED"}
+
+        obj = _new_result_object(context, "AI_Sweep", source)
+        obj.data = mesh
+        obj["ai_helper_op"] = "sweep"
+        obj["ai_helper_sweep_profile_edges"] = list(profile_edges)
+        obj["ai_helper_sweep_path_edges"] = list(path_edges)
+        _apply_optional_modifiers(obj)
+
+        self.report({"INFO"}, "Sweep created")
+        return {"FINISHED"}
+
+
 class AIHELPER_OT_rebuild_3d_ops(bpy.types.Operator):
     bl_idname = "aihelper.rebuild_3d_ops"
     bl_label = "Rebuild 3D Ops"
@@ -245,6 +525,25 @@ def rebuild_ops(scene):
                 mod.merge_threshold = 0.001
             mod.angle = math.radians(angle)
             mod.steps = steps
+            _apply_optional_modifiers(obj)
+            rebuilt += 1
+        elif op == "loft":
+            edges_a = obj.get("ai_helper_loft_edges_a") or []
+            edges_b = obj.get("ai_helper_loft_edges_b") or []
+            offset_z = float(obj.get("ai_helper_loft_offset_z", 0.0))
+            mesh = _loft_mesh_from_source(source, edges_a, edges_b, offset_z)
+            if mesh is None:
+                continue
+            _replace_mesh(obj, mesh)
+            _apply_optional_modifiers(obj)
+            rebuilt += 1
+        elif op == "sweep":
+            profile_edges = obj.get("ai_helper_sweep_profile_edges") or []
+            path_edges = obj.get("ai_helper_sweep_path_edges") or []
+            mesh = _sweep_mesh_from_source(source, profile_edges, path_edges)
+            if mesh is None:
+                continue
+            _replace_mesh(obj, mesh)
             _apply_optional_modifiers(obj)
             rebuilt += 1
 
@@ -384,6 +683,8 @@ class AIHELPER_OT_clear_bevel_modifier(bpy.types.Operator):
 def register():
     bpy.utils.register_class(AIHELPER_OT_extrude_sketch)
     bpy.utils.register_class(AIHELPER_OT_revolve_sketch)
+    bpy.utils.register_class(AIHELPER_OT_loft_profiles)
+    bpy.utils.register_class(AIHELPER_OT_sweep_profile)
     bpy.utils.register_class(AIHELPER_OT_rebuild_3d_ops)
     bpy.utils.register_class(AIHELPER_OT_add_shell_modifier)
     bpy.utils.register_class(AIHELPER_OT_clear_shell_modifier)
@@ -397,5 +698,7 @@ def unregister():
     bpy.utils.unregister_class(AIHELPER_OT_clear_shell_modifier)
     bpy.utils.unregister_class(AIHELPER_OT_add_shell_modifier)
     bpy.utils.unregister_class(AIHELPER_OT_rebuild_3d_ops)
+    bpy.utils.unregister_class(AIHELPER_OT_sweep_profile)
+    bpy.utils.unregister_class(AIHELPER_OT_loft_profiles)
     bpy.utils.unregister_class(AIHELPER_OT_revolve_sketch)
     bpy.utils.unregister_class(AIHELPER_OT_extrude_sketch)

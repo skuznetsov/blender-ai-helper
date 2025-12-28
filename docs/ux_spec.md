@@ -16,7 +16,7 @@
    - Create/modify lines, arcs, circles, rectangles, polylines.
    - Constraints + dimensions are first-class.
 2) 3D Ops Mode
-   - Extrude, Revolve, and later Loft/Sweep.
+   - Extrude, Revolve, Loft, and Sweep.
    - Ops store parameters; rebuild from sketch.
 3) LLM Assist
    - Prompt-driven edits with preview, selection tagging, and undo.
@@ -83,7 +83,7 @@ Sketch Entities + Constraints
   -> History Snapshots + LLM Preview
 
 ## Future Extensions
-- Loft/Sweep with multi-section profiles.
+- Multi-section Loft/Sweep profiles.
 - Constraint conflict visualization (highlight entities).
 - Assembly constraints between objects.
 - Parametric feature timeline (Fusion-like edit stack).

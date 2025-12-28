@@ -319,6 +319,8 @@ class AIHELPER_PT_ops3d(bpy.types.Panel):
         layout.prop(props, "auto_rebuild")
         layout.operator("aihelper.extrude_sketch", text="Extrude Sketch")
         layout.operator("aihelper.revolve_sketch", text="Revolve Sketch")
+        layout.operator("aihelper.loft_profiles", text="Loft Profiles")
+        layout.operator("aihelper.sweep_profile", text="Sweep Profile")
         layout.operator("aihelper.rebuild_3d_ops", text="Rebuild 3D Ops")
         layout.separator()
         layout.label(text="Modifiers")

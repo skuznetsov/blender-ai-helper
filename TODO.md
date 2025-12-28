@@ -257,5 +257,8 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: inspector edits update geometry via solver.
 
 ## 34) Loft/Sweep ops (CAUTION)
-- [ ] Add profile-based Loft/Sweep with rebuild support.
+- [x] Add profile-based Loft/Sweep with rebuild support.
   - DoD: `blender -b --python scripts/validate_blender_ops.py` passes loft/sweep tests.
+  - [x] Loft between two tagged profiles (matching vertex counts).
+  - [x] Sweep tagged profile along tagged path edge.
+  - [x] Rebuild support + tests.
