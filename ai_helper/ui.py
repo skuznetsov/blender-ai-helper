@@ -139,6 +139,7 @@ class AIHELPER_PT_sketch(bpy.types.Panel):
         layout.label(text="Precision")
         layout.operator("aihelper.set_vertex_coords", text="Set Vertex Coords")
         layout.operator("aihelper.set_edge_length", text="Set Edge Length")
+        layout.operator("aihelper.set_edge_angle", text="Set Edge Angle")
 
 
 def register():

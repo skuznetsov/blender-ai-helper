@@ -38,6 +38,8 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: selected vertex can be set to exact XY coordinates.
 - [~] Precision edge length edit (dialog).
   - DoD: selected edge can be set to exact length.
+- [~] Precision edge angle edit (dialog).
+  - DoD: selected edge can be set to exact angle.
 - [~] Snapping (grid, endpoints, midpoints, intersections) using quadtree.
   - DoD: snap selection is stable and predictable.
 - [x] Constraint storage on sketch mesh + solver bridge.

@@ -665,14 +665,104 @@ class AIHELPER_OT_set_edge_length(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_set_edge_angle(bpy.types.Operator):
+    bl_idname = "aihelper.set_edge_angle"
+    bl_label = "Set Edge Angle"
+    bl_description = "Set angle for the selected edge"
+    bl_options = {"REGISTER", "UNDO"}
+
+    angle: bpy.props.FloatProperty(
+        name="Angle",
+        description="Target angle in degrees",
+        default=0.0,
+    )
+    anchor: bpy.props.EnumProperty(
+        name="Anchor",
+        description="Which part of the edge to keep fixed",
+        items=[
+            ("START", "Start", "Keep the first vertex fixed"),
+            ("END", "End", "Keep the second vertex fixed"),
+            ("CENTER", "Center", "Keep the midpoint fixed"),
+        ],
+        default="START",
+    )
+
+    def invoke(self, context, _event):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        if len(edges) != 1:
+            self.report({"WARNING"}, "Select 1 edge")
+            return {"CANCELLED"}
+
+        edge = edges[0]
+        v1 = obj.data.vertices[edge.vertices[0]]
+        v2 = obj.data.vertices[edge.vertices[1]]
+        vec = v2.co - v1.co
+        if vec.length > 1e-8:
+            self.angle = math.degrees(math.atan2(vec.y, vec.x))
+        else:
+            self.angle = 0.0
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        edges = _selected_edges(obj)
+        if len(edges) != 1:
+            self.report({"WARNING"}, "Select 1 edge")
+            return {"CANCELLED"}
+
+        edge = edges[0]
+        v1 = obj.data.vertices[edge.vertices[0]]
+        v2 = obj.data.vertices[edge.vertices[1]]
+        vec = v2.co - v1.co
+        length = vec.length
+        if length < 1e-8:
+            self.report({"WARNING"}, "Edge length too small")
+            return {"CANCELLED"}
+
+        angle = math.radians(self.angle)
+        direction = Vector((math.cos(angle), math.sin(angle), 0.0))
+        if self.anchor == "END":
+            v1.co = v2.co - direction * length
+        elif self.anchor == "CENTER":
+            mid = (v1.co + v2.co) * 0.5
+            offset = direction * (length * 0.5)
+            v1.co = mid - offset
+            v2.co = mid + offset
+        else:
+            v2.co = v1.co + direction * length
+
+        v1.co.z = 0.0
+        v2.co.z = 0.0
+        obj.data.update()
+
+        constraints = load_constraints(obj)
+        if constraints:
+            solve_mesh(obj, constraints)
+        update_dimensions(context, obj, constraints)
+
+        self.report({"INFO"}, "Edge angle updated")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_sketch_mode)
     bpy.utils.register_class(AIHELPER_OT_add_circle)
     bpy.utils.register_class(AIHELPER_OT_set_vertex_coords)
     bpy.utils.register_class(AIHELPER_OT_set_edge_length)
+    bpy.utils.register_class(AIHELPER_OT_set_edge_angle)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_set_edge_angle)
     bpy.utils.unregister_class(AIHELPER_OT_set_edge_length)
     bpy.utils.unregister_class(AIHELPER_OT_set_vertex_coords)
     bpy.utils.unregister_class(AIHELPER_OT_add_circle)
