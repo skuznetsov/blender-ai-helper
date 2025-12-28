@@ -576,6 +576,47 @@ def test_revolve_rebuild():
     check(mod.steps == 8, "revolve rebuild steps incorrect")
 
 
+def test_shell_and_bevel_modifiers():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    result = bpy.ops.aihelper.extrude_sketch(distance=1.0)
+    check("FINISHED" in result, "extrude_sketch failed for modifiers")
+    extrude_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "extrude"), None)
+    check(extrude_obj is not None, "extrude object missing for modifiers")
+
+    bpy.context.view_layer.objects.active = extrude_obj
+    result = bpy.ops.aihelper.add_shell_modifier(thickness=0.2)
+    check("FINISHED" in result, "add_shell_modifier failed")
+    mod = extrude_obj.modifiers.get("AI_Shell")
+    check(mod is not None, "shell modifier missing")
+    check(abs(mod.thickness - 0.2) < 1e-4, "shell thickness incorrect")
+
+    result = bpy.ops.aihelper.add_bevel_modifier(width=0.1, segments=3)
+    check("FINISHED" in result, "add_bevel_modifier failed")
+    mod = extrude_obj.modifiers.get("AI_Bevel")
+    check(mod is not None, "bevel modifier missing")
+    check(abs(mod.width - 0.1) < 1e-4, "bevel width incorrect")
+    check(mod.segments == 3, "bevel segments incorrect")
+
+    extrude_obj["ai_helper_shell_thickness"] = 0.3
+    extrude_obj["ai_helper_bevel_width"] = 0.05
+    extrude_obj["ai_helper_bevel_segments"] = 1
+    result = bpy.ops.aihelper.rebuild_3d_ops()
+    check("FINISHED" in result, "rebuild_3d_ops failed for modifiers")
+    mod = extrude_obj.modifiers.get("AI_Shell")
+    check(mod is not None and abs(mod.thickness - 0.3) < 1e-4, "shell rebuild incorrect")
+    mod = extrude_obj.modifiers.get("AI_Bevel")
+    check(mod is not None and abs(mod.width - 0.05) < 1e-4, "bevel rebuild incorrect")
+    check(mod.segments == 1, "bevel rebuild segments incorrect")
+
+    result = bpy.ops.aihelper.clear_shell_modifier()
+    check("FINISHED" in result, "clear_shell_modifier failed")
+    result = bpy.ops.aihelper.clear_bevel_modifier()
+    check("FINISHED" in result, "clear_bevel_modifier failed")
+    check(extrude_obj.modifiers.get("AI_Shell") is None, "shell modifier not removed")
+    check(extrude_obj.modifiers.get("AI_Bevel") is None, "bevel modifier not removed")
+
+
 def test_auto_rebuild_handler():
     obj = new_sketch()
     build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
@@ -623,6 +664,7 @@ def run():
     test_solver_diagnostics_and_selection()
     test_extrude_rebuild()
     test_revolve_rebuild()
+    test_shell_and_bevel_modifiers()
     test_auto_rebuild_handler()
     print("ALL TESTS PASSED")
 
