@@ -110,6 +110,12 @@ class AIHELPER_PT_ops3d(bpy.types.Panel):
         layout.operator("aihelper.extrude_sketch", text="Extrude Sketch")
         layout.operator("aihelper.revolve_sketch", text="Revolve Sketch")
         layout.operator("aihelper.rebuild_3d_ops", text="Rebuild 3D Ops")
+        layout.separator()
+        layout.label(text="Modifiers")
+        layout.operator("aihelper.add_shell_modifier", text="Add Shell")
+        layout.operator("aihelper.clear_shell_modifier", text="Clear Shell")
+        layout.operator("aihelper.add_bevel_modifier", text="Add Fillet")
+        layout.operator("aihelper.clear_bevel_modifier", text="Clear Fillet")
 
 
 class AIHELPER_PT_sketch(bpy.types.Panel):

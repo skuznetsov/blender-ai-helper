@@ -39,6 +39,7 @@
 - Diagnostics: use Clear Diagnostics to reset the report panel.
 - Dimension edit: select a label and use Edit Selected Dimension to update the value.
 - 3D ops: use Extrude Sketch or Revolve Sketch, then Rebuild 3D Ops if the sketch changes.
+- 3D modifiers: select a 3D op object and use Add Shell or Add Fillet to apply Solidify/Bevel.
 - Auto rebuild: toggle Auto Rebuild 3D Ops in the 3D Ops panel.
 
 ## Notes

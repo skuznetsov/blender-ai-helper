@@ -3,6 +3,9 @@ import math
 import bpy
 import bmesh
 
+_SHELL_MOD = "AI_Shell"
+_BEVEL_MOD = "AI_Bevel"
+
 
 def _get_sketch_object(context):
     obj = context.scene.objects.get("AI_Sketch")
@@ -24,6 +27,53 @@ def _replace_mesh(obj, new_mesh):
     obj.data = new_mesh
     if old_mesh.users == 0:
         bpy.data.meshes.remove(old_mesh)
+
+
+def _remove_modifier(obj, name: str) -> None:
+    mod = obj.modifiers.get(name)
+    if mod is not None:
+        obj.modifiers.remove(mod)
+
+
+def _ensure_shell_modifier(obj, thickness: float) -> None:
+    mod = obj.modifiers.get(_SHELL_MOD)
+    if mod is None:
+        mod = obj.modifiers.new(name=_SHELL_MOD, type="SOLIDIFY")
+    mod.thickness = thickness
+
+
+def _ensure_bevel_modifier(obj, width: float, segments: int) -> None:
+    mod = obj.modifiers.get(_BEVEL_MOD)
+    if mod is None:
+        mod = obj.modifiers.new(name=_BEVEL_MOD, type="BEVEL")
+    mod.width = width
+    mod.segments = segments
+    mod.limit_method = "NONE"
+
+
+def _apply_optional_modifiers(obj) -> None:
+    thickness = obj.get("ai_helper_shell_thickness")
+    if thickness is None or float(thickness) <= 0.0:
+        _remove_modifier(obj, _SHELL_MOD)
+    else:
+        _ensure_shell_modifier(obj, float(thickness))
+
+    width = obj.get("ai_helper_bevel_width")
+    segments = obj.get("ai_helper_bevel_segments")
+    if width is None or float(width) <= 0.0:
+        _remove_modifier(obj, _BEVEL_MOD)
+    else:
+        segs = int(segments) if segments is not None else 2
+        _ensure_bevel_modifier(obj, float(width), max(segs, 1))
+
+
+def _get_active_op_object(context):
+    obj = context.active_object
+    if obj is None or obj.type != "MESH":
+        return None
+    if not obj.get("ai_helper_op"):
+        return None
+    return obj
 
 
 def _extrude_mesh_from_source(source, distance: float):
@@ -72,6 +122,7 @@ class AIHELPER_OT_extrude_sketch(bpy.types.Operator):
         obj.data = mesh
         obj["ai_helper_op"] = "extrude"
         obj["ai_helper_extrude_distance"] = self.distance
+        _apply_optional_modifiers(obj)
 
         self.report({"INFO"}, "Extrude created")
         return {"FINISHED"}
@@ -116,6 +167,7 @@ class AIHELPER_OT_revolve_sketch(bpy.types.Operator):
         mod.steps = self.steps
         mod.use_merge_vertices = True
         mod.merge_threshold = 0.001
+        _apply_optional_modifiers(obj)
 
         self.report({"INFO"}, "Revolve created")
         return {"FINISHED"}
@@ -159,6 +211,7 @@ def rebuild_ops(scene):
             if mesh is None:
                 continue
             _replace_mesh(obj, mesh)
+            _apply_optional_modifiers(obj)
             rebuilt += 1
         elif op == "revolve":
             angle = float(obj.get("ai_helper_revolve_angle", 360.0))
@@ -173,18 +226,157 @@ def rebuild_ops(scene):
                 mod.merge_threshold = 0.001
             mod.angle = math.radians(angle)
             mod.steps = steps
+            _apply_optional_modifiers(obj)
             rebuilt += 1
 
     return rebuilt
+
+
+class AIHELPER_OT_add_shell_modifier(bpy.types.Operator):
+    bl_idname = "aihelper.add_shell_modifier"
+    bl_label = "Add Shell"
+    bl_description = "Add a solidify shell to the selected 3D op"
+    bl_options = {"REGISTER", "UNDO"}
+
+    thickness: bpy.props.FloatProperty(
+        name="Thickness",
+        description="Shell thickness",
+        min=0.0,
+        default=0.1,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        existing = obj.get("ai_helper_shell_thickness")
+        if existing is not None:
+            self.thickness = float(existing)
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        thickness = max(self.thickness, 0.0)
+        if thickness <= 0.0:
+            self.report({"WARNING"}, "Thickness must be greater than 0")
+            return {"CANCELLED"}
+
+        obj["ai_helper_shell_thickness"] = thickness
+        _apply_optional_modifiers(obj)
+        self.report({"INFO"}, "Shell applied")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_clear_shell_modifier(bpy.types.Operator):
+    bl_idname = "aihelper.clear_shell_modifier"
+    bl_label = "Clear Shell"
+    bl_description = "Remove shell modifier from selected 3D op"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        obj.pop("ai_helper_shell_thickness", None)
+        _apply_optional_modifiers(obj)
+        self.report({"INFO"}, "Shell removed")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_bevel_modifier(bpy.types.Operator):
+    bl_idname = "aihelper.add_bevel_modifier"
+    bl_label = "Add Fillet"
+    bl_description = "Add a bevel fillet to the selected 3D op"
+    bl_options = {"REGISTER", "UNDO"}
+
+    width: bpy.props.FloatProperty(
+        name="Width",
+        description="Bevel width",
+        min=0.0,
+        default=0.05,
+    )
+    segments: bpy.props.IntProperty(
+        name="Segments",
+        description="Bevel segments",
+        min=1,
+        max=16,
+        default=2,
+    )
+
+    def invoke(self, context, _event):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        width = obj.get("ai_helper_bevel_width")
+        if width is not None:
+            self.width = float(width)
+        segments = obj.get("ai_helper_bevel_segments")
+        if segments is not None:
+            self.segments = int(segments)
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        width = max(self.width, 0.0)
+        if width <= 0.0:
+            self.report({"WARNING"}, "Width must be greater than 0")
+            return {"CANCELLED"}
+
+        obj["ai_helper_bevel_width"] = width
+        obj["ai_helper_bevel_segments"] = int(self.segments)
+        _apply_optional_modifiers(obj)
+        self.report({"INFO"}, "Fillet applied")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_clear_bevel_modifier(bpy.types.Operator):
+    bl_idname = "aihelper.clear_bevel_modifier"
+    bl_label = "Clear Fillet"
+    bl_description = "Remove bevel from selected 3D op"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = _get_active_op_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select a 3D op object")
+            return {"CANCELLED"}
+
+        obj.pop("ai_helper_bevel_width", None)
+        obj.pop("ai_helper_bevel_segments", None)
+        _apply_optional_modifiers(obj)
+        self.report({"INFO"}, "Fillet removed")
+        return {"FINISHED"}
 
 
 def register():
     bpy.utils.register_class(AIHELPER_OT_extrude_sketch)
     bpy.utils.register_class(AIHELPER_OT_revolve_sketch)
     bpy.utils.register_class(AIHELPER_OT_rebuild_3d_ops)
+    bpy.utils.register_class(AIHELPER_OT_add_shell_modifier)
+    bpy.utils.register_class(AIHELPER_OT_clear_shell_modifier)
+    bpy.utils.register_class(AIHELPER_OT_add_bevel_modifier)
+    bpy.utils.register_class(AIHELPER_OT_clear_bevel_modifier)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_clear_bevel_modifier)
+    bpy.utils.unregister_class(AIHELPER_OT_add_bevel_modifier)
+    bpy.utils.unregister_class(AIHELPER_OT_clear_shell_modifier)
+    bpy.utils.unregister_class(AIHELPER_OT_add_shell_modifier)
     bpy.utils.unregister_class(AIHELPER_OT_rebuild_3d_ops)
     bpy.utils.unregister_class(AIHELPER_OT_revolve_sketch)
     bpy.utils.unregister_class(AIHELPER_OT_extrude_sketch)
