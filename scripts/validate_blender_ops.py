@@ -13,8 +13,10 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import ai_helper  # noqa: E402
+from ai_helper.llm import dispatch_tool_calls  # noqa: E402
 from ai_helper.sketch.circles import load_circles  # noqa: E402
 from ai_helper.sketch.constraints import AngleConstraint, RadiusConstraint  # noqa: E402
+from ai_helper.sketch.history import load_history, restore_snapshot, snapshot_state  # noqa: E402
 from ai_helper.sketch.store import load_constraints  # noqa: E402
 from ai_helper.ops.constraints import (  # noqa: E402
     _angle_targets,
@@ -617,6 +619,39 @@ def test_shell_and_bevel_modifiers():
     check(extrude_obj.modifiers.get("AI_Bevel") is None, "bevel modifier not removed")
 
 
+def test_history_snapshot_restore():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    snapshot_state(obj, "Step 1")
+
+    obj.data.vertices[1].co.x = 3.0
+    obj.data.update()
+    select(obj, edges=[0])
+    result = bpy.ops.aihelper.add_distance_constraint(distance=2.0)
+    check("FINISHED" in result, "add_distance_constraint failed for history")
+    snapshot_state(obj, "Step 2")
+
+    history = load_history(obj)
+    check(len(history) >= 2, "history length incorrect")
+    result = bpy.ops.aihelper.restore_snapshot(index=0)
+    check("FINISHED" in result, "restore_snapshot failed")
+    v1 = obj.data.vertices[1].co
+    check(abs(v1.x - 1.0) < 1e-3, "history restore vertex incorrect")
+    constraints = load_constraints(obj)
+    check(len(constraints) == 0, "history restore constraints incorrect")
+
+
+def test_llm_auto_constraints():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(obj, [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)], [(0, 1)])
+    select(obj, edges=[e_indices[0]])
+    tool_calls = [{"name": "add_constraint", "arguments": {"kind": "horizontal"}}]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm add_constraint errors")
+    constraints = load_constraints(obj)
+    check(len(constraints) == 1, "llm constraint not added")
+
+
 def test_auto_rebuild_handler():
     obj = new_sketch()
     build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
@@ -665,6 +700,8 @@ def run():
     test_extrude_rebuild()
     test_revolve_rebuild()
     test_shell_and_bevel_modifiers()
+    test_history_snapshot_restore()
+    test_llm_auto_constraints()
     test_auto_rebuild_handler()
     print("ALL TESTS PASSED")
 

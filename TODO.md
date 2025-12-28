@@ -115,7 +115,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: Solidify modifier applied with stored params; rebuild preserves thickness.
 - [x] Parametric fillet/bevel modifier for 3D ops.
   - DoD: Bevel modifier applied with stored params; rebuild preserves settings.
-- [ ] Sketch history timeline (last N ops).
+- [x] Sketch history timeline (last N ops).
   - DoD: timeline UI lists ops; user can jump to previous state.
-- [ ] LLM auto-constraints from prompt.
+- [x] LLM auto-constraints from prompt.
   - DoD: prompt yields constraint suggestions; preview & apply flow.
