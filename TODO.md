@@ -52,7 +52,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - [x] Direct edit on labels (dialog).
   - [x] Angle labels + direct edit.
   - [x] Radius labels + direct edit.
-- [~] Constraint UI (toggle per entity + auto-constraints on draw).
+- [x] Constraint UI (toggle per entity + auto-constraints on draw).
   - DoD: constraints appear and can be edited or removed.
   - [x] Manual add/edit/remove for distance/h/v/fix via panel.
   - [x] Angle constraint add/edit.
