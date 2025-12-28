@@ -1,6 +1,7 @@
 import bpy
 
 from .sketch.constraints import AngleConstraint, DistanceConstraint, RadiusConstraint
+from .sketch.history import load_history
 from .sketch.store import load_constraints
 
 
@@ -157,14 +158,46 @@ class AIHELPER_PT_sketch(bpy.types.Panel):
         layout.operator("aihelper.set_edge_angle", text="Set Edge Angle")
 
 
+class AIHELPER_PT_history(bpy.types.Panel):
+    bl_label = "History"
+    bl_idname = "AIHELPER_PT_history"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Helper"
+    bl_parent_id = "AIHELPER_PT_main"
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.scene.objects.get("AI_Sketch")
+        if obj is None or obj.type != "MESH":
+            layout.label(text="No sketch mesh found")
+            return
+
+        history = load_history(obj)
+        layout.label(text=f"History: {len(history)}")
+        layout.operator("aihelper.capture_snapshot", text="Capture Snapshot")
+        layout.operator("aihelper.clear_history", text="Clear History")
+        if history:
+            layout.separator()
+            start = max(len(history) - 10, 0)
+            for idx, entry in enumerate(history[start:], start=start):
+                label = entry.get("label", "Snapshot")
+                row = layout.row(align=True)
+                row.label(text=label)
+                op = row.operator("aihelper.restore_snapshot", text="Restore")
+                op.index = idx
+
+
 def register():
     bpy.utils.register_class(AIHELPER_PT_main)
     bpy.utils.register_class(AIHELPER_PT_constraints)
     bpy.utils.register_class(AIHELPER_PT_ops3d)
     bpy.utils.register_class(AIHELPER_PT_sketch)
+    bpy.utils.register_class(AIHELPER_PT_history)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_PT_history)
     bpy.utils.unregister_class(AIHELPER_PT_sketch)
     bpy.utils.unregister_class(AIHELPER_PT_ops3d)
     bpy.utils.unregister_class(AIHELPER_PT_constraints)

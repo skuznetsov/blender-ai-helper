@@ -8,6 +8,7 @@ from mathutils import Matrix, Vector
 from ..sketch.constraints import HorizontalConstraint, VerticalConstraint
 from ..sketch.circles import append_circle, new_circle_id
 from ..sketch.dimensions import update_dimensions
+from ..sketch.history import snapshot_state
 from ..sketch.quadtree import Point2D, Quadtree
 from ..sketch.solver_bridge import solve_mesh
 from ..sketch.store import append_constraint, load_constraints, new_constraint_id
@@ -358,6 +359,10 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
             edge_id = self._add_line(context, self.start, end)
             if edge_id and self.auto_constraints:
                 self._apply_auto_constraints(context, edge_id, self.start, end)
+            if edge_id:
+                obj = ensure_sketch_object(context)
+                if obj is not None:
+                    snapshot_state(obj, "Line")
             self.start = end
             self.input_str = ""
             self.preview_str = ""
@@ -377,6 +382,10 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
             edge_id = self._add_line(context, self.start, point)
             if edge_id and self.auto_constraints:
                 self._apply_auto_constraints(context, edge_id, self.start, point)
+            if edge_id:
+                obj = ensure_sketch_object(context)
+                if obj is not None:
+                    snapshot_state(obj, "Line")
             self.start = point
             self.input_str = ""
             self.preview_str = ""
@@ -613,6 +622,7 @@ class AIHELPER_OT_add_circle(bpy.types.Operator):
                 "radius": float(self.radius),
             },
         )
+        snapshot_state(obj, "Circle")
 
         self.report({"INFO"}, "Circle added")
         return {"FINISHED"}
@@ -682,6 +692,7 @@ class AIHELPER_OT_set_vertex_coords(bpy.types.Operator):
             solve_mesh(obj, constraints)
         update_dimensions(context, obj, constraints)
 
+        snapshot_state(obj, "Set Vertex Coords")
         self.report({"INFO"}, "Vertex updated")
         return {"FINISHED"}
 
@@ -767,6 +778,7 @@ class AIHELPER_OT_set_edge_length(bpy.types.Operator):
             solve_mesh(obj, constraints)
         update_dimensions(context, obj, constraints)
 
+        snapshot_state(obj, "Set Edge Length")
         self.report({"INFO"}, "Edge length updated")
         return {"FINISHED"}
 
@@ -855,6 +867,7 @@ class AIHELPER_OT_set_edge_angle(bpy.types.Operator):
             solve_mesh(obj, constraints)
         update_dimensions(context, obj, constraints)
 
+        snapshot_state(obj, "Set Edge Angle")
         self.report({"INFO"}, "Edge angle updated")
         return {"FINISHED"}
 

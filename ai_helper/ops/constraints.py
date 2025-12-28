@@ -31,6 +31,7 @@ from ..sketch.dimensions import (
     get_dimension_kind,
     update_dimensions,
 )
+from ..sketch.history import snapshot_state
 from ..sketch.solver_bridge import solve_mesh
 from ..sketch.store import (
     append_constraint,
@@ -289,6 +290,9 @@ def _update_solver_report(context, diag):
     props.last_solver_report = _format_diag(diag)
     props.last_solver_details = _format_diag_details(diag)
     props.last_solver_worst_id = _base_constraint_id(diag.worst_constraint_id)
+    obj = context.scene.objects.get("AI_Sketch")
+    if obj is not None and obj.type == "MESH":
+        snapshot_state(obj, "Constraints Update")
 
 
 def _select_constraint_geometry(obj, constraint, extend=False):
@@ -935,6 +939,7 @@ class AIHELPER_OT_clear_constraints(bpy.types.Operator):
         context.scene.ai_helper.last_solver_report = ""
         context.scene.ai_helper.last_solver_details = ""
         context.scene.ai_helper.last_solver_worst_id = ""
+        snapshot_state(obj, "Constraints Cleared")
         self.report({"INFO"}, "Constraints cleared")
         return {"FINISHED"}
 
