@@ -78,10 +78,10 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
   - DoD: parameters can be adjusted after creation.
   - [x] Extrude via edge extrusion + stored params.
   - [x] Revolve via Screw modifier + stored params.
-- [~] Rebuild policy: sketch is source of truth; 3D ops regenerate on change.
+- [x] Rebuild policy: sketch is source of truth; 3D ops regenerate on change.
   - DoD: changes propagate reliably without corrupting mesh.
   - [x] Rebuild operator for extrude/revolve.
-  - [~] Auto-rebuild on sketch edits (handler implemented; needs Blender validation).
+  - [x] Auto-rebuild on sketch edits.
 
 ## 6) LLM integration (SAFE)
 - [x] Selection serializer (compact summary, units, bbox, counts).

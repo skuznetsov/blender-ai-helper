@@ -1,6 +1,7 @@
 import math
 import os
 import sys
+import types
 
 import bpy
 import bmesh
@@ -431,6 +432,32 @@ def test_revolve_rebuild():
     check(mod.steps == 8, "revolve rebuild steps incorrect")
 
 
+def test_auto_rebuild_handler():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    result = bpy.ops.aihelper.extrude_sketch(distance=1.0)
+    check("FINISHED" in result, "extrude_sketch failed for auto rebuild")
+    extrude_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "extrude"), None)
+    check(extrude_obj is not None, "extrude object missing for auto rebuild")
+
+    obj.data.vertices[1].co.x = 2.0
+    obj.data.update()
+
+    props = bpy.context.scene.ai_helper
+    props.auto_rebuild = True
+
+    from ai_helper.core import handlers  # noqa: E402
+
+    update = types.SimpleNamespace(id=obj, is_updated_geometry=True, is_updated_data=False)
+    depsgraph = types.SimpleNamespace(updates=[update])
+    handlers.ai_helper_depsgraph_handler(bpy.context.scene, depsgraph)
+    check(handlers._PENDING_REBUILD, "auto rebuild not scheduled")
+    handlers._run_rebuild(bpy.context.scene)
+
+    xs = [round(v.co.x, 4) for v in extrude_obj.data.vertices]
+    check(any(abs(x - 2.0) < 1e-3 for x in xs), "auto rebuild did not update extrude")
+
+
 def run():
     ai_helper.register()
     test_precision_vertex_coords()
@@ -448,6 +475,7 @@ def run():
     test_solver_diagnostics_and_selection()
     test_extrude_rebuild()
     test_revolve_rebuild()
+    test_auto_rebuild_handler()
     print("ALL TESTS PASSED")
 
 
