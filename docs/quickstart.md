@@ -3,8 +3,13 @@
 ## Install
 1. Open Blender 5.0.
 2. Edit > Preferences > Add-ons > Install.
-3. Select the `ai_helper` folder from this repo.
+3. Select the `ai_helper` folder (or a zip of it) from this repo.
 4. Enable the add-on.
+
+## Dev Install (auto-update)
+1. Run `./scripts/install_addon.sh --method symlink` from the repo root.
+2. Open Blender > Edit > Preferences > Add-ons and enable "AI Helper".
+3. After code changes, use F3 > "Reload Scripts" or disable/enable the add-on.
 
 ## LLM Preview
 1. Open View3D > Sidebar > AI Helper.

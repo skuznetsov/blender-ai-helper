@@ -270,3 +270,7 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 ## 36) Multi-section loft (CAUTION)
 - [x] Loft across 3+ tagged profiles with alignment.
   - DoD: `blender -b --python scripts/validate_blender_ops.py` passes loft tests.
+
+## 37) Install script + docs (SAFE)
+- [x] Add install/update script and document usage.
+  - DoD: `scripts/install_addon.sh` exists and Quick Start mentions it.
