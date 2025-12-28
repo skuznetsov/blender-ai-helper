@@ -131,6 +131,11 @@ class AIHELPER_PT_sketch(bpy.types.Panel):
         col_angle = layout.column()
         col_angle.enabled = props.angle_snap_enabled
         col_angle.prop(props, "angle_snap_deg")
+        row = col_angle.row(align=True)
+        row.label(text="Presets")
+        for value in (15.0, 30.0, 45.0):
+            op = row.operator("aihelper.set_angle_snap_preset", text=f"{int(value)}")
+            op.angle = value
         col = layout.column()
         col.enabled = props.snap_enabled
         col.prop(props, "snap_grid")

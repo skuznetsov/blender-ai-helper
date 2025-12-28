@@ -787,15 +787,46 @@ class AIHELPER_OT_set_edge_angle(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_set_angle_snap_preset(bpy.types.Operator):
+    bl_idname = "aihelper.set_angle_snap_preset"
+    bl_label = "Angle Snap Preset"
+    bl_description = "Set the angle snap increment"
+    bl_options = {"REGISTER", "UNDO"}
+
+    angle: bpy.props.FloatProperty(
+        name="Angle",
+        description="Angle snap increment in degrees",
+        default=15.0,
+        min=1.0,
+        max=90.0,
+    )
+    enable: bpy.props.BoolProperty(
+        name="Enable",
+        description="Enable angle snap",
+        default=True,
+        options={"HIDDEN"},
+    )
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        props.angle_snap_deg = self.angle
+        if self.enable:
+            props.angle_snap_enabled = True
+        self.report({"INFO"}, f"Angle snap set to {self.angle:g} deg")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_sketch_mode)
     bpy.utils.register_class(AIHELPER_OT_add_circle)
     bpy.utils.register_class(AIHELPER_OT_set_vertex_coords)
     bpy.utils.register_class(AIHELPER_OT_set_edge_length)
     bpy.utils.register_class(AIHELPER_OT_set_edge_angle)
+    bpy.utils.register_class(AIHELPER_OT_set_angle_snap_preset)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_set_angle_snap_preset)
     bpy.utils.unregister_class(AIHELPER_OT_set_edge_angle)
     bpy.utils.unregister_class(AIHELPER_OT_set_edge_length)
     bpy.utils.unregister_class(AIHELPER_OT_set_vertex_coords)

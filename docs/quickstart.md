@@ -20,6 +20,7 @@
 - Press A to toggle auto constraints; press S to toggle snapping; press Q to toggle angle snap; hold Shift to temporarily disable snapping.
 - Axis lock: press X or Y to lock movement to the axis (press again to clear).
 - Live preview: header shows length and angle while moving the mouse.
+- Angle snap presets: use 15/30/45 buttons in Sketch Settings.
 - Add Circle: click Add Circle and enter center/radius in the dialog (defaults to 3D cursor).
 - Constraints: select edges or vertices, then use the Constraints panel to add Distance/Horizontal/Vertical/Angle/Radius/Coincident/Midpoint/Equal Length/Concentric/Symmetry/Tangent/Parallel/Perpendicular/Fix.
 - Angle constraints: select two connected edges and set the target angle.
