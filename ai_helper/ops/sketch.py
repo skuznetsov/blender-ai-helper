@@ -35,6 +35,214 @@ def _selected_edges(obj):
     return [e for e in obj.data.edges if e.select]
 
 
+def parse_polar(text, start):
+    if start is None:
+        return None
+    if text.startswith("@"):
+        text = text[1:]
+    if "<" not in text:
+        return None
+
+    length_str, angle_str = [p.strip() for p in text.split("<", 1)]
+    try:
+        length = float(length_str)
+        angle = float(angle_str)
+    except ValueError:
+        return None
+
+    radians = math.radians(angle)
+    dx = length * math.cos(radians)
+    dy = length * math.sin(radians)
+    return Vector((start.x + dx, start.y + dy, 0.0))
+
+
+def parse_input(text, start, relative_mode):
+    text = text.strip()
+    if not text:
+        return None
+
+    if text.startswith("@"):
+        return parse_polar(text, start)
+
+    absolute = False
+    if text.startswith("="):
+        absolute = True
+        text = text[1:]
+
+    if "," not in text:
+        return None
+
+    parts = [p.strip() for p in text.split(",", 1)]
+    if len(parts) != 2:
+        return None
+
+    try:
+        x = float(parts[0])
+        y = float(parts[1])
+    except ValueError:
+        return None
+
+    if absolute or not relative_mode:
+        return Vector((x, y, 0.0))
+    if start is None:
+        return None
+    return Vector((start.x + x, start.y + y, 0.0))
+
+
+def apply_axis_lock(location, start, axis_lock):
+    if start is None or axis_lock is None:
+        return location
+    if axis_lock == "X":
+        return Vector((location.x, start.y, 0.0))
+    if axis_lock == "Y":
+        return Vector((start.x, location.y, 0.0))
+    return location
+
+
+def apply_angle_snap(location, start, angle_snap_enabled, angle_snap_deg, axis_lock):
+    if start is None or not angle_snap_enabled or axis_lock is not None:
+        return location
+    if angle_snap_deg <= 0.0:
+        return location
+
+    dx = location.x - start.x
+    dy = location.y - start.y
+    length = math.hypot(dx, dy)
+    if length < 1e-8:
+        return location
+
+    step = math.radians(angle_snap_deg)
+    angle = math.atan2(dy, dx)
+    snapped = round(angle / step) * step
+    return Vector(
+        (
+            start.x + math.cos(snapped) * length,
+            start.y + math.sin(snapped) * length,
+            0.0,
+        )
+    )
+
+
+def format_preview(start, point):
+    if start is None or point is None:
+        return ""
+    dx = point.x - start.x
+    dy = point.y - start.y
+    length = math.hypot(dx, dy)
+    angle = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
+    return f"len={length:.3f} ang={angle:.1f}"
+
+
+def grid_step_value(grid_step, scale_length):
+    scale = scale_length or 1.0
+    return grid_step * scale
+
+
+def snap_to_grid(location, grid_step, scale_length, snap_grid):
+    if not snap_grid:
+        return location
+
+    step = grid_step_value(grid_step, scale_length)
+    if step <= 0.0:
+        return location
+
+    x = math.floor(location.x / step + 0.5) * step
+    y = math.floor(location.y / step + 0.5) * step
+    return Vector((x, y, 0.0))
+
+
+def point_on_segment(px, py, x1, y1, x2, y2):
+    min_x = min(x1, x2) - 1e-6
+    max_x = max(x1, x2) + 1e-6
+    min_y = min(y1, y2) - 1e-6
+    max_y = max(y1, y2) + 1e-6
+    return min_x <= px <= max_x and min_y <= py <= max_y
+
+
+def segment_intersection(p1, p2, p3, p4):
+    x1, y1 = p1.x, p1.y
+    x2, y2 = p2.x, p2.y
+    x3, y3 = p3.x, p3.y
+    x4, y4 = p4.x, p4.y
+
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if abs(denom) < 1e-8:
+        return None
+
+    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
+    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom
+
+    if not point_on_segment(px, py, x1, y1, x2, y2):
+        return None
+    if not point_on_segment(px, py, x3, y3, x4, y4):
+        return None
+
+    return Vector((px, py, 0.0))
+
+
+def segment_intersections(segments):
+    hits = []
+    count = len(segments)
+    for i in range(count):
+        a1, a2, a_idx1, a_idx2 = segments[i]
+        for j in range(i + 1, count):
+            b1, b2, b_idx1, b_idx2 = segments[j]
+            if a_idx1 in (b_idx1, b_idx2) or a_idx2 in (b_idx1, b_idx2):
+                continue
+            hit = segment_intersection(a1, a2, b1, b2)
+            if hit is not None:
+                hits.append(Point2D(hit.x, hit.y, payload=("inter", i, j)))
+    return hits
+
+
+def collect_feature_points(obj, snap_verts, snap_mids, snap_inters):
+    if obj is None or obj.type != "MESH":
+        return []
+
+    verts = obj.data.vertices
+    points = []
+    segments = []
+
+    for v in verts:
+        pos = obj.matrix_world @ v.co
+        if snap_verts:
+            points.append(Point2D(pos.x, pos.y, payload=("vert", v.index)))
+
+    for edge in obj.data.edges:
+        v1 = verts[edge.vertices[0]]
+        v2 = verts[edge.vertices[1]]
+        p1 = obj.matrix_world @ v1.co
+        p2 = obj.matrix_world @ v2.co
+        segments.append((p1, p2, v1.index, v2.index))
+
+        if snap_mids:
+            mid = (p1 + p2) * 0.5
+            points.append(Point2D(mid.x, mid.y, payload=("mid", edge.index)))
+
+    if snap_inters and len(segments) > 1:
+        points.extend(segment_intersections(segments))
+
+    return points
+
+
+def snap_to_features(location, obj, snap_radius, scale_length, snap_verts, snap_mids, snap_inters):
+    points = collect_feature_points(obj, snap_verts, snap_mids, snap_inters)
+    if not points:
+        return None
+
+    tree = Quadtree.build(points)
+    nearest = tree.query_nearest(Point2D(location.x, location.y), k=1)
+    if not nearest:
+        return None
+
+    radius = snap_radius * (scale_length or 1.0)
+    candidate = nearest[0]
+    if candidate.distance_to(Point2D(location.x, location.y)) <= radius:
+        return Vector((candidate.x, candidate.y, 0.0))
+
+    return None
+
+
 class AIHELPER_OT_sketch_mode(bpy.types.Operator):
     bl_idname = "aihelper.sketch_mode"
     bl_label = "Sketch Mode"
@@ -193,56 +401,10 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         context.area.header_text_set(None)
 
     def _parse_input(self, text):
-        text = text.strip()
-        if not text:
-            return None
-
-        if text.startswith("@"):
-            return self._parse_polar(text)
-
-        absolute = False
-        if text.startswith("="):
-            absolute = True
-            text = text[1:]
-
-        if "," not in text:
-            return None
-
-        parts = [p.strip() for p in text.split(",", 1)]
-        if len(parts) != 2:
-            return None
-
-        try:
-            x = float(parts[0])
-            y = float(parts[1])
-        except ValueError:
-            return None
-
-        if absolute or not self.relative_mode:
-            return Vector((x, y, 0.0))
-        if self.start is None:
-            return None
-        return Vector((self.start.x + x, self.start.y + y, 0.0))
+        return parse_input(text, self.start, self.relative_mode)
 
     def _parse_polar(self, text):
-        if self.start is None:
-            return None
-
-        text = text[1:]
-        if "<" not in text:
-            return None
-
-        length_str, angle_str = [p.strip() for p in text.split("<", 1)]
-        try:
-            length = float(length_str)
-            angle = float(angle_str)
-        except ValueError:
-            return None
-
-        radians = math.radians(angle)
-        dx = length * math.cos(radians)
-        dy = length * math.sin(radians)
-        return Vector((self.start.x + dx, self.start.y + dy, 0.0))
+        return parse_polar(text, self.start)
 
     def _mouse_to_plane(self, context, event):
         region = context.region
@@ -271,35 +433,15 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         return self._apply_angle_snap(self._apply_axis_lock(self._snap_to_grid(context, location)))
 
     def _apply_axis_lock(self, location):
-        if self.start is None or self.axis_lock is None:
-            return location
-        if self.axis_lock == "X":
-            return Vector((location.x, self.start.y, 0.0))
-        if self.axis_lock == "Y":
-            return Vector((self.start.x, location.y, 0.0))
-        return location
+        return apply_axis_lock(location, self.start, self.axis_lock)
 
     def _apply_angle_snap(self, location):
-        if self.start is None or not self.angle_snap_enabled or self.axis_lock is not None:
-            return location
-        if self.angle_snap_deg <= 0.0:
-            return location
-
-        dx = location.x - self.start.x
-        dy = location.y - self.start.y
-        length = math.hypot(dx, dy)
-        if length < 1e-8:
-            return location
-
-        step = math.radians(self.angle_snap_deg)
-        angle = math.atan2(dy, dx)
-        snapped = round(angle / step) * step
-        return Vector(
-            (
-                self.start.x + math.cos(snapped) * length,
-                self.start.y + math.sin(snapped) * length,
-                0.0,
-            )
+        return apply_angle_snap(
+            location,
+            self.start,
+            self.angle_snap_enabled,
+            self.angle_snap_deg,
+            self.axis_lock,
         )
 
     def _update_preview(self, context, event):
@@ -311,116 +453,43 @@ class AIHELPER_OT_sketch_mode(bpy.types.Operator):
         if point is None:
             self.preview_str = ""
             return
-
-        dx = point.x - self.start.x
-        dy = point.y - self.start.y
-        length = math.hypot(dx, dy)
-        angle = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-        self.preview_str = f"len={length:.3f} ang={angle:.1f}"
+        self.preview_str = format_preview(self.start, point)
 
     def _snap_to_grid(self, context, location):
-        if not self.snap_grid:
-            return location
-
-        step = self._grid_step(context)
-        if step <= 0.0:
-            return location
-
-        x = math.floor(location.x / step + 0.5) * step
-        y = math.floor(location.y / step + 0.5) * step
-        return Vector((x, y, 0.0))
+        return snap_to_grid(
+            location,
+            self.grid_step,
+            context.scene.unit_settings.scale_length,
+            self.snap_grid,
+        )
 
     def _grid_step(self, context):
-        scale = context.scene.unit_settings.scale_length or 1.0
-        return self.grid_step * scale
+        return grid_step_value(self.grid_step, context.scene.unit_settings.scale_length)
 
     def _snap_to_features(self, context, location):
-        points = self._collect_feature_points(context)
-        if not points:
-            return None
-
-        tree = Quadtree.build(points)
-        nearest = tree.query_nearest(Point2D(location.x, location.y), k=1)
-        if not nearest:
-            return None
-
-        radius = self.snap_radius * (context.scene.unit_settings.scale_length or 1.0)
-        candidate = nearest[0]
-        if candidate.distance_to(Point2D(location.x, location.y)) <= radius:
-            return Vector((candidate.x, candidate.y, 0.0))
-
-        return None
+        obj = context.scene.objects.get("AI_Sketch")
+        return snap_to_features(
+            location,
+            obj,
+            self.snap_radius,
+            context.scene.unit_settings.scale_length,
+            self.snap_verts,
+            self.snap_mids,
+            self.snap_inters,
+        )
 
     def _collect_feature_points(self, context):
         obj = context.scene.objects.get("AI_Sketch")
-        if obj is None or obj.type != "MESH":
-            return []
-
-        verts = obj.data.vertices
-        points = []
-        segments = []
-
-        for v in verts:
-            pos = obj.matrix_world @ v.co
-            if self.snap_verts:
-                points.append(Point2D(pos.x, pos.y, payload=("vert", v.index)))
-
-        for edge in obj.data.edges:
-            v1 = verts[edge.vertices[0]]
-            v2 = verts[edge.vertices[1]]
-            p1 = obj.matrix_world @ v1.co
-            p2 = obj.matrix_world @ v2.co
-            segments.append((p1, p2, v1.index, v2.index))
-
-            if self.snap_mids:
-                mid = (p1 + p2) * 0.5
-                points.append(Point2D(mid.x, mid.y, payload=("mid", edge.index)))
-
-        if self.snap_inters and len(segments) > 1:
-            points.extend(self._segment_intersections(segments))
-
-        return points
+        return collect_feature_points(obj, self.snap_verts, self.snap_mids, self.snap_inters)
 
     def _segment_intersections(self, segments):
-        hits = []
-        count = len(segments)
-        for i in range(count):
-            a1, a2, a_idx1, a_idx2 = segments[i]
-            for j in range(i + 1, count):
-                b1, b2, b_idx1, b_idx2 = segments[j]
-                if a_idx1 in (b_idx1, b_idx2) or a_idx2 in (b_idx1, b_idx2):
-                    continue
-                hit = self._segment_intersection(a1, a2, b1, b2)
-                if hit is not None:
-                    hits.append(Point2D(hit.x, hit.y, payload=("inter", i, j)))
-        return hits
+        return segment_intersections(segments)
 
     def _segment_intersection(self, p1, p2, p3, p4):
-        x1, y1 = p1.x, p1.y
-        x2, y2 = p2.x, p2.y
-        x3, y3 = p3.x, p3.y
-        x4, y4 = p4.x, p4.y
-
-        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-        if abs(denom) < 1e-8:
-            return None
-
-        px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
-        py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom
-
-        if not self._point_on_segment(px, py, x1, y1, x2, y2):
-            return None
-        if not self._point_on_segment(px, py, x3, y3, x4, y4):
-            return None
-
-        return Vector((px, py, 0.0))
+        return segment_intersection(p1, p2, p3, p4)
 
     def _point_on_segment(self, px, py, x1, y1, x2, y2):
-        min_x = min(x1, x2) - 1e-6
-        max_x = max(x1, x2) + 1e-6
-        min_y = min(y1, y2) - 1e-6
-        max_y = max(y1, y2) + 1e-6
-        return min_x <= px <= max_x and min_y <= py <= max_y
+        return point_on_segment(px, py, x1, y1, x2, y2)
 
     def _add_line(self, context, start, end):
         obj = ensure_sketch_object(context)
