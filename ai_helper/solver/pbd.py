@@ -346,21 +346,23 @@ def _apply_angle(points: Dict[str, PointState], c: AngleConstraint) -> float:
     cross = v1x * v2y - v1y * v2x
     current = math.atan2(cross, dot)
     target = math.radians(c.degrees)
+    target_mag = abs(target)
+    if abs(current) < 1e-8:
+        target_signed = target_mag
+    else:
+        target_signed = math.copysign(target_mag, current)
 
-    desired = abs(target)
-    delta = abs(current) - desired
+    delta = current - target_signed
     if abs(delta) < 1e-8:
         return 0.0
 
-    sign = 1.0 if current >= 0.0 else -1.0
-
     if not p1.locked and not p2.locked:
-        _rotate_around(p1, pv, sign * (-delta / 2.0))
-        _rotate_around(p2, pv, sign * (delta / 2.0))
+        _rotate_around(p1, pv, delta / 2.0)
+        _rotate_around(p2, pv, -delta / 2.0)
     elif not p1.locked and p2.locked:
-        _rotate_around(p1, pv, sign * (-delta))
+        _rotate_around(p1, pv, delta)
     elif p1.locked and not p2.locked:
-        _rotate_around(p2, pv, sign * (delta))
+        _rotate_around(p2, pv, -delta)
 
     return delta
 
@@ -511,7 +513,12 @@ def _angle_error(points: Dict[str, PointState], c: AngleConstraint) -> float:
     cross = v1x * v2y - v1y * v2x
     current = math.atan2(cross, dot)
     target = math.radians(c.degrees)
-    return abs(current) - abs(target)
+    target_mag = abs(target)
+    if abs(current) < 1e-8:
+        target_signed = target_mag
+    else:
+        target_signed = math.copysign(target_mag, current)
+    return current - target_signed
 
 
 def _apply_parallel(points: Dict[str, PointState], line_map: Dict[str, Tuple[str, str]], c: ParallelConstraint) -> float:
