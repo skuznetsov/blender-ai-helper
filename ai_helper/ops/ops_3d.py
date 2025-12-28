@@ -76,16 +76,21 @@ def _get_active_op_object(context):
     return obj
 
 
-def _extrude_mesh_from_source(source, distance: float):
+def _extrude_mesh_from_source(source, distance: float, edge_indices=None):
     mesh = bpy.data.meshes.new("AI_Extrude")
     bm = bmesh.new()
     bm.from_mesh(source.data)
 
-    if not bm.edges:
+    bm.edges.ensure_lookup_table()
+    edges = bm.edges
+    if edge_indices:
+        edges = [bm.edges[i] for i in edge_indices if 0 <= i < len(bm.edges)]
+
+    if not edges:
         bm.free()
         return None
 
-    res = bmesh.ops.extrude_edge_only(bm, edges=bm.edges)
+    res = bmesh.ops.extrude_edge_only(bm, edges=edges)
     extruded = [elem for elem in res["geom"] if isinstance(elem, bmesh.types.BMVert)]
     bmesh.ops.translate(bm, verts=extruded, vec=(0.0, 0.0, distance))
 
@@ -106,6 +111,11 @@ class AIHELPER_OT_extrude_sketch(bpy.types.Operator):
         description="Extrude distance",
         default=1.0,
     )
+    use_selection: bpy.props.BoolProperty(
+        name="Use Selection",
+        description="Extrude only selected edges when available",
+        default=True,
+    )
 
     def execute(self, context):
         source = _get_sketch_object(context)
@@ -113,7 +123,13 @@ class AIHELPER_OT_extrude_sketch(bpy.types.Operator):
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        mesh = _extrude_mesh_from_source(source, self.distance)
+        edge_indices = None
+        if self.use_selection:
+            edge_indices = [e.index for e in source.data.edges if e.select]
+            if not edge_indices:
+                edge_indices = None
+
+        mesh = _extrude_mesh_from_source(source, self.distance, edge_indices=edge_indices)
         if mesh is None:
             self.report({"WARNING"}, "Sketch has no edges")
             return {"CANCELLED"}
@@ -122,6 +138,8 @@ class AIHELPER_OT_extrude_sketch(bpy.types.Operator):
         obj.data = mesh
         obj["ai_helper_op"] = "extrude"
         obj["ai_helper_extrude_distance"] = self.distance
+        if edge_indices:
+            obj["ai_helper_extrude_edges"] = list(edge_indices)
         _apply_optional_modifiers(obj)
 
         self.report({"INFO"}, "Extrude created")
@@ -207,7 +225,8 @@ def rebuild_ops(scene):
 
         if op == "extrude":
             distance = float(obj.get("ai_helper_extrude_distance", 1.0))
-            mesh = _extrude_mesh_from_source(source, distance)
+            edge_indices = obj.get("ai_helper_extrude_edges")
+            mesh = _extrude_mesh_from_source(source, distance, edge_indices=edge_indices)
             if mesh is None:
                 continue
             _replace_mesh(obj, mesh)

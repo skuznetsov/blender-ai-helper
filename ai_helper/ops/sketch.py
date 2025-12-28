@@ -6,12 +6,35 @@ from bpy_extras import view3d_utils
 from mathutils import Matrix, Vector
 
 from ..sketch.constraints import HorizontalConstraint, VerticalConstraint
-from ..sketch.circles import append_circle, new_circle_id
-from ..sketch.dimensions import update_dimensions
+from ..sketch.circles import (
+    append_circle,
+    clear_circles,
+    find_circle_by_center,
+    find_circle_by_vertex,
+    load_circles,
+    new_circle_id,
+    save_circles,
+)
+from ..sketch.dimensions import clear_dimensions, update_dimensions
 from ..sketch.history import snapshot_state
 from ..sketch.quadtree import Point2D, Quadtree
+from ..sketch.rectangles import (
+    append_rectangle,
+    clear_rectangles,
+    load_rectangles,
+    new_rectangle_id,
+    save_rectangles,
+)
 from ..sketch.solver_bridge import solve_mesh
-from ..sketch.store import append_constraint, load_constraints, new_constraint_id
+from ..sketch.store import (
+    append_constraint,
+    clear_constraints,
+    load_constraints,
+    new_constraint_id,
+    save_constraints,
+)
+from ..sketch.tags import clear_tags, load_tags, register_tag, resolve_tags
+from .constraints import _set_selection
 
 
 def ensure_sketch_object(context):
@@ -28,6 +51,370 @@ def ensure_sketch_object(context):
     return obj
 
 
+def add_line_to_sketch(
+    context,
+    start,
+    end,
+    *,
+    tag=None,
+    auto_constraints=True,
+    hv_tolerance_deg=8.0,
+):
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return None
+
+    if (end - start).length < 1e-8:
+        return None
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    v1 = bm.verts.new((start.x, start.y, 0.0))
+    v2 = bm.verts.new((end.x, end.y, 0.0))
+    edge = bm.edges.new((v1, v2))
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.verts.index_update()
+    bm.edges.index_update()
+
+    edge_index = edge.index
+    v1_index = v1.index
+    v2_index = v2.index
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+    if tag:
+        register_tag(obj, tag, verts=[v1_index, v2_index], edges=[edge_index])
+
+    if auto_constraints:
+        dx = end.x - start.x
+        dy = end.y - start.y
+        if abs(dx) >= 1e-8 or abs(dy) >= 1e-8:
+            angle = abs(math.degrees(math.atan2(dy, dx)))
+            if angle < hv_tolerance_deg or abs(angle - 180.0) < hv_tolerance_deg:
+                append_constraint(obj, HorizontalConstraint(id=new_constraint_id(), line=str(edge_index)))
+            elif abs(angle - 90.0) < hv_tolerance_deg:
+                append_constraint(obj, VerticalConstraint(id=new_constraint_id(), line=str(edge_index)))
+            constraints = load_constraints(obj)
+            if constraints:
+                solve_mesh(obj, constraints)
+
+    snapshot_state(obj, "Line")
+    return {"edge": edge_index, "verts": [v1_index, v2_index]}
+
+
+def add_circle_to_sketch(
+    context,
+    center,
+    radius,
+    *,
+    segments=32,
+    tag=None,
+):
+    if radius <= 0.0:
+        return None
+
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return None
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    matrix = Matrix.Translation((center.x, center.y, 0.0))
+    result = bmesh.ops.create_circle(
+        bm,
+        cap_ends=False,
+        segments=segments,
+        radius=radius,
+        matrix=matrix,
+    )
+    center_vert = bm.verts.new((center.x, center.y, 0.0))
+    bm.verts.ensure_lookup_table()
+    bm.verts.index_update()
+
+    circle_verts = result.get("verts", [])
+    circle_ids = [int(v.index) for v in circle_verts]
+    center_id = int(center_vert.index)
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+    circle_id = new_circle_id()
+    append_circle(
+        obj,
+        {
+            "id": circle_id,
+            "center": str(center_id),
+            "verts": [str(v) for v in circle_ids],
+            "radius": float(radius),
+        },
+    )
+
+    if tag:
+        register_tag(
+            obj,
+            tag,
+            verts=circle_ids,
+            center=center_id,
+            circle_id=circle_id,
+        )
+
+    snapshot_state(obj, "Circle")
+    return {"id": circle_id, "center": center_id, "verts": circle_ids}
+
+
+def add_arc_to_sketch(
+    context,
+    center,
+    radius,
+    start_angle_deg,
+    end_angle_deg,
+    *,
+    segments=16,
+    clockwise=False,
+    tag=None,
+):
+    if radius <= 0.0:
+        return None
+
+    start = math.radians(start_angle_deg)
+    end = math.radians(end_angle_deg)
+    sweep = end - start
+    if clockwise:
+        if sweep > 0.0:
+            sweep -= 2.0 * math.pi
+    else:
+        if sweep < 0.0:
+            sweep += 2.0 * math.pi
+    if abs(sweep) < 1e-8:
+        return None
+
+    segments = max(int(segments), 1)
+    step = sweep / segments
+    angles = [start + step * idx for idx in range(segments + 1)]
+
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return None
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    arc_verts = []
+    for angle in angles:
+        x = center.x + math.cos(angle) * radius
+        y = center.y + math.sin(angle) * radius
+        arc_verts.append(bm.verts.new((x, y, 0.0)))
+    center_vert = bm.verts.new((center.x, center.y, 0.0))
+
+    bm.verts.ensure_lookup_table()
+    edges = []
+    for idx in range(len(arc_verts) - 1):
+        edges.append(bm.edges.new((arc_verts[idx], arc_verts[idx + 1])))
+
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.verts.index_update()
+    bm.edges.index_update()
+
+    vert_indices = [v.index for v in arc_verts]
+    edge_indices = [e.index for e in edges]
+    center_index = center_vert.index
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+    circle_id = new_circle_id()
+    append_circle(
+        obj,
+        {
+            "id": circle_id,
+            "center": str(center_index),
+            "verts": [str(v) for v in vert_indices],
+            "radius": float(radius),
+            "is_arc": True,
+            "start_angle": float(start_angle_deg),
+            "end_angle": float(end_angle_deg),
+            "clockwise": bool(clockwise),
+        },
+    )
+
+    if tag:
+        register_tag(
+            obj,
+            tag,
+            verts=vert_indices,
+            edges=edge_indices,
+            center=center_index,
+            circle_id=circle_id,
+        )
+
+    snapshot_state(obj, "Arc")
+    return {"id": circle_id, "center": center_index, "verts": vert_indices, "edges": edge_indices}
+
+
+def add_polyline_to_sketch(
+    context,
+    points,
+    *,
+    closed=False,
+    tag=None,
+    auto_constraints=True,
+    hv_tolerance_deg=8.0,
+):
+    if not points or len(points) < 2:
+        return None
+
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return None
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    bm_verts = [bm.verts.new((pt.x, pt.y, 0.0)) for pt in points]
+    bm.verts.ensure_lookup_table()
+    edges = []
+    for idx in range(len(bm_verts) - 1):
+        edges.append(bm.edges.new((bm_verts[idx], bm_verts[idx + 1])))
+    if closed:
+        edges.append(bm.edges.new((bm_verts[-1], bm_verts[0])))
+
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.verts.index_update()
+    bm.edges.index_update()
+
+    vert_indices = [v.index for v in bm_verts]
+    edge_indices = [e.index for e in edges]
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+    if tag:
+        register_tag(obj, tag, verts=vert_indices, edges=edge_indices)
+
+    if auto_constraints:
+        constraints = load_constraints(obj)
+        added = False
+        pairs = list(zip(points[:-1], points[1:]))
+        if closed:
+            pairs.append((points[-1], points[0]))
+        for edge_id, (start, end) in zip(edge_indices, pairs):
+            dx = end.x - start.x
+            dy = end.y - start.y
+            if abs(dx) < 1e-8 and abs(dy) < 1e-8:
+                continue
+            angle = abs(math.degrees(math.atan2(dy, dx)))
+            if angle < hv_tolerance_deg or abs(angle - 180.0) < hv_tolerance_deg:
+                constraints.append(HorizontalConstraint(id=new_constraint_id(), line=str(edge_id)))
+                added = True
+            elif abs(angle - 90.0) < hv_tolerance_deg:
+                constraints.append(VerticalConstraint(id=new_constraint_id(), line=str(edge_id)))
+                added = True
+        if added:
+            save_constraints(obj, constraints)
+            solve_mesh(obj, constraints)
+
+    snapshot_state(obj, "Polyline")
+    return {"edges": edge_indices, "verts": vert_indices}
+
+
+def add_rectangle_to_sketch(
+    context,
+    center,
+    width,
+    height,
+    *,
+    rotation_deg=0.0,
+    tag=None,
+    auto_constraints=True,
+    hv_tolerance_deg=8.0,
+):
+    if width <= 0.0 or height <= 0.0:
+        return None
+
+    if abs(rotation_deg) > 1e-6:
+        auto_constraints = False
+
+    half_w = width * 0.5
+    half_h = height * 0.5
+    offsets = [
+        (-half_w, -half_h),
+        (half_w, -half_h),
+        (half_w, half_h),
+        (-half_w, half_h),
+    ]
+    angle = math.radians(rotation_deg)
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    points = []
+    for dx, dy in offsets:
+        rx = dx * cos_a - dy * sin_a
+        ry = dx * sin_a + dy * cos_a
+        points.append(Vector((center.x + rx, center.y + ry, 0.0)))
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return None
+
+    entry = add_polyline_to_sketch(
+        context,
+        points,
+        closed=True,
+        tag=tag,
+        auto_constraints=auto_constraints,
+        hv_tolerance_deg=hv_tolerance_deg,
+    )
+    if entry is None:
+        return None
+
+    rect_id = new_rectangle_id()
+    append_rectangle(
+        obj,
+        {
+            "id": rect_id,
+            "center": [float(center.x), float(center.y)],
+            "width": float(width),
+            "height": float(height),
+            "rotation": float(rotation_deg),
+            "verts": [str(v) for v in entry.get("verts", [])],
+            "edges": [str(e) for e in entry.get("edges", [])],
+            "tag": tag or "",
+        },
+    )
+    entry["rect_id"] = rect_id
+    return entry
+
+
+def clear_sketch_data(context) -> bool:
+    obj = ensure_sketch_object(context)
+    if obj is None:
+        return False
+
+    if hasattr(obj.data, "clear_geometry"):
+        obj.data.clear_geometry()
+    else:
+        bm = bmesh.new()
+        bm.to_mesh(obj.data)
+        bm.free()
+    obj.data.update()
+
+    clear_constraints(obj)
+    clear_circles(obj)
+    clear_rectangles(obj)
+    clear_tags(obj)
+    if "ai_helper_history" in obj:
+        del obj["ai_helper_history"]
+    clear_dimensions(context)
+    return True
+
+
 def _selected_vertices(obj):
     return [v for v in obj.data.vertices if v.select]
 
@@ -35,6 +422,175 @@ def _selected_vertices(obj):
 def _selected_edges(obj):
     return [e for e in obj.data.edges if e.select]
 
+
+def _selected_arc(obj):
+    circles = load_circles(obj)
+    if not circles:
+        return None
+
+    for vert in obj.data.vertices:
+        if not vert.select:
+            continue
+        circle = find_circle_by_vertex(circles, str(vert.index))
+        if circle and circle.get("is_arc"):
+            return circle
+        circle = find_circle_by_center(circles, str(vert.index))
+        if circle and circle.get("is_arc"):
+            return circle
+
+    for edge in obj.data.edges:
+        if not edge.select:
+            continue
+        for vid in edge.vertices:
+            circle = find_circle_by_vertex(circles, str(vid))
+            if circle and circle.get("is_arc"):
+                return circle
+    return None
+
+
+def _arc_angles_for_circle(obj, circle):
+    center_id = circle.get("center")
+    if center_id is None:
+        return None
+    try:
+        center = obj.data.vertices[int(center_id)].co
+    except (ValueError, IndexError):
+        return None
+    vert_ids = [int(v) for v in circle.get("verts", [])]
+    if len(vert_ids) < 2:
+        return None
+    try:
+        start = obj.data.vertices[vert_ids[0]].co
+        end = obj.data.vertices[vert_ids[-1]].co
+    except (ValueError, IndexError):
+        return None
+
+    def _angle_deg(point):
+        return (math.degrees(math.atan2(point.y - center.y, point.x - center.x)) + 360.0) % 360.0
+
+    return _angle_deg(start), _angle_deg(end)
+
+
+def _update_arc_geometry(obj, circle, center, radius, start_angle_deg, end_angle_deg, clockwise):
+    center_id = circle.get("center")
+    if center_id is None:
+        return False
+
+    try:
+        center_vert = obj.data.vertices[int(center_id)]
+    except (ValueError, IndexError):
+        return False
+
+    vert_ids = [int(v) for v in circle.get("verts", [])]
+    if len(vert_ids) < 2:
+        return False
+
+    start = math.radians(start_angle_deg)
+    end = math.radians(end_angle_deg)
+    sweep = end - start
+    if clockwise:
+        if sweep > 0.0:
+            sweep -= 2.0 * math.pi
+    else:
+        if sweep < 0.0:
+            sweep += 2.0 * math.pi
+    if abs(sweep) < 1e-8:
+        return False
+
+    segments = len(vert_ids) - 1
+    step = sweep / segments
+    angles = [start + step * idx for idx in range(segments + 1)]
+
+    center_vert.co.x = center.x
+    center_vert.co.y = center.y
+    center_vert.co.z = 0.0
+
+    for vid, angle in zip(vert_ids, angles):
+        try:
+            vert = obj.data.vertices[vid]
+        except IndexError:
+            return False
+        vert.co.x = center.x + math.cos(angle) * radius
+        vert.co.y = center.y + math.sin(angle) * radius
+        vert.co.z = 0.0
+
+    obj.data.update()
+    return True
+
+
+def _selected_rectangle(obj):
+    rectangles = load_rectangles(obj)
+    if not rectangles:
+        return None
+
+    selected_verts = {v.index for v in obj.data.vertices if v.select}
+    selected_edges = {e.index for e in obj.data.edges if e.select}
+
+    for rect in rectangles:
+        rect_verts = {int(v) for v in rect.get("verts", [])}
+        rect_edges = {int(e) for e in rect.get("edges", [])}
+        if rect_verts & selected_verts or rect_edges & selected_edges:
+            return rect
+    return None
+
+
+def _update_rectangle_geometry(obj, rect, center, width, height, rotation_deg):
+    vert_ids = [int(v) for v in rect.get("verts", [])]
+    if len(vert_ids) < 4:
+        return False
+
+    half_w = width * 0.5
+    half_h = height * 0.5
+    offsets = [
+        (-half_w, -half_h),
+        (half_w, -half_h),
+        (half_w, half_h),
+        (-half_w, half_h),
+    ]
+    angle = math.radians(rotation_deg)
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    points = []
+    for dx, dy in offsets:
+        rx = dx * cos_a - dy * sin_a
+        ry = dx * sin_a + dy * cos_a
+        points.append(Vector((center.x + rx, center.y + ry, 0.0)))
+
+    for vid, point in zip(vert_ids[:4], points):
+        try:
+            vert = obj.data.vertices[vid]
+        except IndexError:
+            return False
+        vert.co.x = point.x
+        vert.co.y = point.y
+        vert.co.z = 0.0
+
+    obj.data.update()
+    return True
+
+
+def _rectangle_metrics_from_verts(obj, vert_ids):
+    coords = []
+    for vid in vert_ids[:4]:
+        try:
+            coords.append(obj.data.vertices[vid].co.copy())
+        except IndexError:
+            return None
+    if len(coords) < 4:
+        return None
+
+    center = sum((v for v in coords), Vector()) / len(coords)
+    edges = [coords[(i + 1) % 4] - coords[i] for i in range(4)]
+    lengths = [edge.length for edge in edges]
+    width = max(lengths)
+    height = min(lengths)
+    rotation = 0.0
+    if lengths:
+        idx = lengths.index(width)
+        vec = edges[idx]
+        rotation = math.degrees(math.atan2(vec.y, vec.x))
+    rotation = rotation % 360.0
+    return center.x, center.y, width, height, rotation
 
 def parse_polar(text, start):
     if start is None:
@@ -574,6 +1130,11 @@ class AIHELPER_OT_add_circle(bpy.types.Operator):
         description="Circle center Y",
         default=0.0,
     )
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Optional tag for LLM selection",
+        default="",
+    )
 
     def invoke(self, context, _event):
         cursor = context.scene.cursor.location
@@ -586,45 +1147,542 @@ class AIHELPER_OT_add_circle(bpy.types.Operator):
             self.report({"WARNING"}, "Radius must be greater than 0")
             return {"CANCELLED"}
 
+        entry = add_circle_to_sketch(
+            context,
+            Vector((self.center_x, self.center_y, 0.0)),
+            self.radius,
+            segments=self.segments,
+            tag=self.tag.strip() or None,
+        )
+        if entry is None:
+            self.report({"WARNING"}, "Unable to add circle")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Circle added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_arc(bpy.types.Operator):
+    bl_idname = "aihelper.add_arc"
+    bl_label = "Add Arc"
+    bl_description = "Add a circular arc to the sketch mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Arc radius",
+        min=0.0,
+        default=1.0,
+    )
+    segments: bpy.props.IntProperty(
+        name="Segments",
+        description="Arc resolution",
+        min=1,
+        max=256,
+        default=16,
+    )
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="Arc center X",
+        default=0.0,
+    )
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Arc center Y",
+        default=0.0,
+    )
+    start_angle: bpy.props.FloatProperty(
+        name="Start Angle",
+        description="Start angle in degrees",
+        default=0.0,
+    )
+    end_angle: bpy.props.FloatProperty(
+        name="End Angle",
+        description="End angle in degrees",
+        default=90.0,
+    )
+    clockwise: bpy.props.BoolProperty(
+        name="Clockwise",
+        description="Sweep clockwise",
+        default=False,
+    )
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Optional tag for LLM selection",
+        default="",
+    )
+
+    def invoke(self, context, _event):
+        cursor = context.scene.cursor.location
+        self.center_x = cursor.x
+        self.center_y = cursor.y
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        if self.radius <= 0.0:
+            self.report({"WARNING"}, "Radius must be greater than 0")
+            return {"CANCELLED"}
+
+        entry = add_arc_to_sketch(
+            context,
+            Vector((self.center_x, self.center_y, 0.0)),
+            self.radius,
+            self.start_angle,
+            self.end_angle,
+            segments=self.segments,
+            clockwise=self.clockwise,
+            tag=self.tag.strip() or None,
+        )
+        if entry is None:
+            self.report({"WARNING"}, "Unable to add arc")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Arc added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_edit_arc(bpy.types.Operator):
+    bl_idname = "aihelper.edit_arc"
+    bl_label = "Edit Arc"
+    bl_description = "Edit the selected arc"
+    bl_options = {"REGISTER", "UNDO"}
+
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Arc radius",
+        min=0.0,
+        default=1.0,
+    )
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="Arc center X",
+        default=0.0,
+    )
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Arc center Y",
+        default=0.0,
+    )
+    start_angle: bpy.props.FloatProperty(
+        name="Start Angle",
+        description="Start angle in degrees",
+        default=0.0,
+    )
+    end_angle: bpy.props.FloatProperty(
+        name="End Angle",
+        description="End angle in degrees",
+        default=90.0,
+    )
+    clockwise: bpy.props.BoolProperty(
+        name="Clockwise",
+        description="Sweep clockwise",
+        default=False,
+    )
+
+    def invoke(self, context, _event):
         obj = ensure_sketch_object(context)
         if obj is None:
             self.report({"WARNING"}, "No sketch mesh found")
             return {"CANCELLED"}
 
-        bm = bmesh.new()
-        bm.from_mesh(obj.data)
-        matrix = Matrix.Translation((self.center_x, self.center_y, 0.0))
-        result = bmesh.ops.create_circle(
-            bm,
-            cap_ends=False,
-            segments=self.segments,
-            radius=self.radius,
-            matrix=matrix,
-        )
-        center_vert = bm.verts.new((self.center_x, self.center_y, 0.0))
-        bm.verts.ensure_lookup_table()
-        bm.verts.index_update()
-        circle_verts = result.get("verts", [])
-        circle_ids = [str(v.index) for v in circle_verts]
-        center_id = str(center_vert.index)
+        circle = _selected_arc(obj)
+        if not circle:
+            self.report({"WARNING"}, "Select an arc")
+            return {"CANCELLED"}
 
-        bm.to_mesh(obj.data)
-        bm.free()
-        obj.data.update()
+        center_id = circle.get("center")
+        if center_id is None:
+            self.report({"WARNING"}, "Arc center missing")
+            return {"CANCELLED"}
 
-        circle_id = new_circle_id()
-        append_circle(
+        try:
+            center = obj.data.vertices[int(center_id)].co
+        except (ValueError, IndexError):
+            self.report({"WARNING"}, "Arc center invalid")
+            return {"CANCELLED"}
+
+        self.center_x = center.x
+        self.center_y = center.y
+        self.radius = float(circle.get("radius", self.radius))
+        self.clockwise = bool(circle.get("clockwise", False))
+
+        start_angle = circle.get("start_angle")
+        end_angle = circle.get("end_angle")
+        if start_angle is None or end_angle is None:
+            angles = _arc_angles_for_circle(obj, circle)
+            if angles:
+                start_angle, end_angle = angles
+        if start_angle is not None:
+            self.start_angle = float(start_angle)
+        if end_angle is not None:
+            self.end_angle = float(end_angle)
+
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        circles = load_circles(obj)
+        circle = _selected_arc(obj)
+        if not circle:
+            self.report({"WARNING"}, "Select an arc")
+            return {"CANCELLED"}
+
+        if self.radius <= 0.0:
+            self.report({"WARNING"}, "Radius must be greater than 0")
+            return {"CANCELLED"}
+
+        center = Vector((self.center_x, self.center_y, 0.0))
+        ok = _update_arc_geometry(
             obj,
-            {
-                "id": circle_id,
-                "center": center_id,
-                "verts": circle_ids,
-                "radius": float(self.radius),
-            },
+            circle,
+            center,
+            self.radius,
+            self.start_angle,
+            self.end_angle,
+            self.clockwise,
         )
-        snapshot_state(obj, "Circle")
+        if not ok:
+            self.report({"WARNING"}, "Unable to update arc")
+            return {"CANCELLED"}
 
-        self.report({"INFO"}, "Circle added")
+        circle_id = circle.get("id")
+        for entry in circles:
+            if entry.get("id") == circle_id:
+                entry["radius"] = float(self.radius)
+                entry["start_angle"] = float(self.start_angle)
+                entry["end_angle"] = float(self.end_angle)
+                entry["clockwise"] = bool(self.clockwise)
+                entry["is_arc"] = True
+                break
+        save_circles(obj, circles)
+
+        constraints = load_constraints(obj)
+        if constraints:
+            solve_mesh(obj, constraints)
+        update_dimensions(context, obj, constraints)
+
+        snapshot_state(obj, "Edit Arc")
+        self.report({"INFO"}, "Arc updated")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_line(bpy.types.Operator):
+    bl_idname = "aihelper.add_line"
+    bl_label = "Add Line"
+    bl_description = "Add a line segment to the sketch mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    start_x: bpy.props.FloatProperty(
+        name="Start X",
+        description="Start X coordinate",
+        default=0.0,
+    )
+    start_y: bpy.props.FloatProperty(
+        name="Start Y",
+        description="Start Y coordinate",
+        default=0.0,
+    )
+    end_x: bpy.props.FloatProperty(
+        name="End X",
+        description="End X coordinate",
+        default=1.0,
+    )
+    end_y: bpy.props.FloatProperty(
+        name="End Y",
+        description="End Y coordinate",
+        default=0.0,
+    )
+    auto_constraints: bpy.props.BoolProperty(
+        name="Auto Constraints",
+        description="Apply horizontal/vertical constraints when applicable",
+        default=True,
+    )
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Optional tag for LLM selection",
+        default="",
+    )
+
+    def execute(self, context):
+        hv_tolerance = getattr(context.scene.ai_helper, "hv_tolerance_deg", 8.0)
+        entry = add_line_to_sketch(
+            context,
+            Vector((self.start_x, self.start_y, 0.0)),
+            Vector((self.end_x, self.end_y, 0.0)),
+            tag=self.tag.strip() or None,
+            auto_constraints=self.auto_constraints,
+            hv_tolerance_deg=hv_tolerance,
+        )
+        if entry is None:
+            self.report({"WARNING"}, "Unable to add line")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Line added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_rectangle(bpy.types.Operator):
+    bl_idname = "aihelper.add_rectangle"
+    bl_label = "Add Rectangle"
+    bl_description = "Add an axis-aligned rectangle to the sketch mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    width: bpy.props.FloatProperty(
+        name="Width",
+        description="Rectangle width",
+        min=0.0,
+        default=1.0,
+    )
+    height: bpy.props.FloatProperty(
+        name="Height",
+        description="Rectangle height",
+        min=0.0,
+        default=1.0,
+    )
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="Rectangle center X",
+        default=0.0,
+    )
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Rectangle center Y",
+        default=0.0,
+    )
+    rotation_deg: bpy.props.FloatProperty(
+        name="Rotation",
+        description="Rotation in degrees",
+        default=0.0,
+    )
+    auto_constraints: bpy.props.BoolProperty(
+        name="Auto Constraints",
+        description="Apply horizontal/vertical constraints",
+        default=True,
+    )
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Optional tag for LLM selection",
+        default="",
+    )
+
+    def invoke(self, context, _event):
+        cursor = context.scene.cursor.location
+        self.center_x = cursor.x
+        self.center_y = cursor.y
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        hv_tolerance = getattr(context.scene.ai_helper, "hv_tolerance_deg", 8.0)
+        entry = add_rectangle_to_sketch(
+            context,
+            Vector((self.center_x, self.center_y, 0.0)),
+            self.width,
+            self.height,
+            rotation_deg=self.rotation_deg,
+            tag=self.tag.strip() or None,
+            auto_constraints=self.auto_constraints,
+            hv_tolerance_deg=hv_tolerance,
+        )
+        if entry is None:
+            self.report({"WARNING"}, "Unable to add rectangle")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Rectangle added")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_add_polyline(bpy.types.Operator):
+    bl_idname = "aihelper.add_polyline"
+    bl_label = "Add Polyline"
+    bl_description = "Add a polyline to the sketch mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    points: bpy.props.StringProperty(
+        name="Points",
+        description="Points as x,y; x,y; x,y",
+        default="",
+    )
+    closed: bpy.props.BoolProperty(
+        name="Closed",
+        description="Close the polyline",
+        default=False,
+    )
+    auto_constraints: bpy.props.BoolProperty(
+        name="Auto Constraints",
+        description="Apply horizontal/vertical constraints",
+        default=True,
+    )
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Optional tag for LLM selection",
+        default="",
+    )
+
+    def invoke(self, context, _event):
+        cursor = context.scene.cursor.location
+        self.points = f"{cursor.x:.3f},{cursor.y:.3f}; {cursor.x + 1.0:.3f},{cursor.y:.3f}"
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        points = self._parse_points(self.points)
+        if points is None:
+            self.report({"WARNING"}, "Invalid points format")
+            return {"CANCELLED"}
+
+        hv_tolerance = getattr(context.scene.ai_helper, "hv_tolerance_deg", 8.0)
+        entry = add_polyline_to_sketch(
+            context,
+            points,
+            closed=self.closed,
+            tag=self.tag.strip() or None,
+            auto_constraints=self.auto_constraints,
+            hv_tolerance_deg=hv_tolerance,
+        )
+        if entry is None:
+            self.report({"WARNING"}, "Unable to add polyline")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Polyline added")
+        return {"FINISHED"}
+
+    def _parse_points(self, text):
+        raw = text.strip()
+        if not raw:
+            return None
+        points = []
+        for chunk in raw.split(";"):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if "," not in chunk:
+                return None
+            xs, ys = [part.strip() for part in chunk.split(",", 1)]
+            try:
+                x = float(xs)
+                y = float(ys)
+            except ValueError:
+                return None
+            points.append(Vector((x, y, 0.0)))
+        if len(points) < 2:
+            return None
+        return points
+
+
+class AIHELPER_OT_edit_rectangle(bpy.types.Operator):
+    bl_idname = "aihelper.edit_rectangle"
+    bl_label = "Edit Rectangle"
+    bl_description = "Edit the selected rectangle"
+    bl_options = {"REGISTER", "UNDO"}
+
+    width: bpy.props.FloatProperty(
+        name="Width",
+        description="Rectangle width",
+        min=0.0,
+        default=1.0,
+    )
+    height: bpy.props.FloatProperty(
+        name="Height",
+        description="Rectangle height",
+        min=0.0,
+        default=1.0,
+    )
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="Rectangle center X",
+        default=0.0,
+    )
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Rectangle center Y",
+        default=0.0,
+    )
+    rotation_deg: bpy.props.FloatProperty(
+        name="Rotation",
+        description="Rotation in degrees",
+        default=0.0,
+    )
+
+    def invoke(self, context, _event):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        rect = _selected_rectangle(obj)
+        if not rect:
+            self.report({"WARNING"}, "Select a rectangle")
+            return {"CANCELLED"}
+
+        center = rect.get("center", [0.0, 0.0])
+        if isinstance(center, list) and len(center) >= 2:
+            self.center_x = float(center[0])
+            self.center_y = float(center[1])
+        self.width = float(rect.get("width", self.width))
+        self.height = float(rect.get("height", self.height))
+        self.rotation_deg = float(rect.get("rotation", self.rotation_deg))
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        obj = ensure_sketch_object(context)
+        if obj is None:
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        rect = _selected_rectangle(obj)
+        if not rect:
+            self.report({"WARNING"}, "Select a rectangle")
+            return {"CANCELLED"}
+
+        if self.width <= 0.0 or self.height <= 0.0:
+            self.report({"WARNING"}, "Width/height must be greater than 0")
+            return {"CANCELLED"}
+
+        center = Vector((self.center_x, self.center_y, 0.0))
+        ok = _update_rectangle_geometry(
+            obj,
+            rect,
+            center,
+            self.width,
+            self.height,
+            self.rotation_deg,
+        )
+        if not ok:
+            self.report({"WARNING"}, "Unable to update rectangle")
+            return {"CANCELLED"}
+
+        constraints = load_constraints(obj)
+        if constraints:
+            solve_mesh(obj, constraints)
+        update_dimensions(context, obj, constraints)
+
+        rect_id = rect.get("id")
+        if rect_id:
+            rectangles = load_rectangles(obj)
+            for entry in rectangles:
+                if entry.get("id") != rect_id:
+                    continue
+                vert_ids = [int(v) for v in entry.get("verts", [])]
+                metrics = _rectangle_metrics_from_verts(obj, vert_ids)
+                if metrics:
+                    cx, cy, width, height, rotation = metrics
+                    entry["center"] = [float(cx), float(cy)]
+                    entry["width"] = float(width)
+                    entry["height"] = float(height)
+                    entry["rotation"] = float(rotation)
+                else:
+                    entry["center"] = [float(self.center_x), float(self.center_y)]
+                    entry["width"] = float(self.width)
+                    entry["height"] = float(self.height)
+                    entry["rotation"] = float(self.rotation_deg)
+                break
+            save_rectangles(obj, rectangles)
+
+        snapshot_state(obj, "Edit Rectangle")
+        self.report({"INFO"}, "Rectangle updated")
         return {"FINISHED"}
 
 
@@ -901,19 +1959,185 @@ class AIHELPER_OT_set_angle_snap_preset(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIHELPER_OT_select_tag(bpy.types.Operator):
+    bl_idname = "aihelper.select_tag"
+    bl_label = "Select Tag"
+    bl_description = "Select sketch entities by tag"
+    bl_options = {"REGISTER", "UNDO"}
+
+    tag: bpy.props.StringProperty(
+        name="Tag",
+        description="Tag to select",
+        default="",
+    )
+    extend: bpy.props.BoolProperty(
+        name="Extend",
+        description="Extend current selection",
+        default=False,
+    )
+
+    def execute(self, context):
+        obj = ensure_sketch_object(context)
+        if obj is None or obj.type != "MESH":
+            self.report({"WARNING"}, "No sketch mesh found")
+            return {"CANCELLED"}
+
+        tag = self.tag.strip()
+        if not tag:
+            self.report({"WARNING"}, "Tag is empty")
+            return {"CANCELLED"}
+
+        tags = load_tags(obj)
+        if tag not in tags:
+            self.report({"WARNING"}, f"Tag not found: {tag}")
+            return {"CANCELLED"}
+
+        verts, edges = resolve_tags(obj, [tag], prefer_center=True)
+        if not verts and not edges:
+            self.report({"WARNING"}, f"Tag has no geometry: {tag}")
+            return {"CANCELLED"}
+
+        _set_selection(obj, verts=verts, edges=edges, extend=self.extend)
+        context.view_layer.objects.active = obj
+        self.report({"INFO"}, f"Selected tag: {tag}")
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_inspector_apply_vertex(bpy.types.Operator):
+    bl_idname = "aihelper.inspector_apply_vertex"
+    bl_label = "Apply Vertex"
+    bl_description = "Apply inspector vertex values"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        result = bpy.ops.aihelper.set_vertex_coords(
+            x=props.inspector_vertex_x,
+            y=props.inspector_vertex_y,
+            relative=False,
+        )
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Inspector vertex update failed")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_inspector_apply_edge_length(bpy.types.Operator):
+    bl_idname = "aihelper.inspector_apply_edge_length"
+    bl_label = "Apply Edge Length"
+    bl_description = "Apply inspector edge length"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        result = bpy.ops.aihelper.set_edge_length(
+            length=props.inspector_edge_length,
+            anchor=props.inspector_edge_anchor,
+        )
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Inspector edge length update failed")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_inspector_apply_edge_angle(bpy.types.Operator):
+    bl_idname = "aihelper.inspector_apply_edge_angle"
+    bl_label = "Apply Edge Angle"
+    bl_description = "Apply inspector edge angle"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        result = bpy.ops.aihelper.set_edge_angle(
+            angle=props.inspector_edge_angle,
+            anchor=props.inspector_edge_anchor,
+        )
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Inspector edge angle update failed")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_inspector_apply_arc(bpy.types.Operator):
+    bl_idname = "aihelper.inspector_apply_arc"
+    bl_label = "Apply Arc"
+    bl_description = "Apply inspector arc values"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        result = bpy.ops.aihelper.edit_arc(
+            radius=props.inspector_arc_radius,
+            center_x=props.inspector_arc_center_x,
+            center_y=props.inspector_arc_center_y,
+            start_angle=props.inspector_arc_start_angle,
+            end_angle=props.inspector_arc_end_angle,
+            clockwise=props.inspector_arc_clockwise,
+        )
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Inspector arc update failed")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AIHELPER_OT_inspector_apply_rectangle(bpy.types.Operator):
+    bl_idname = "aihelper.inspector_apply_rectangle"
+    bl_label = "Apply Rectangle"
+    bl_description = "Apply inspector rectangle values"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        props = context.scene.ai_helper
+        result = bpy.ops.aihelper.edit_rectangle(
+            width=props.inspector_rect_width,
+            height=props.inspector_rect_height,
+            center_x=props.inspector_rect_center_x,
+            center_y=props.inspector_rect_center_y,
+            rotation_deg=props.inspector_rect_rotation,
+        )
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Inspector rectangle update failed")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(AIHELPER_OT_sketch_mode)
+    bpy.utils.register_class(AIHELPER_OT_add_line)
     bpy.utils.register_class(AIHELPER_OT_add_circle)
+    bpy.utils.register_class(AIHELPER_OT_add_arc)
+    bpy.utils.register_class(AIHELPER_OT_edit_arc)
+    bpy.utils.register_class(AIHELPER_OT_add_rectangle)
+    bpy.utils.register_class(AIHELPER_OT_add_polyline)
+    bpy.utils.register_class(AIHELPER_OT_edit_rectangle)
     bpy.utils.register_class(AIHELPER_OT_set_vertex_coords)
     bpy.utils.register_class(AIHELPER_OT_set_edge_length)
     bpy.utils.register_class(AIHELPER_OT_set_edge_angle)
     bpy.utils.register_class(AIHELPER_OT_set_angle_snap_preset)
+    bpy.utils.register_class(AIHELPER_OT_select_tag)
+    bpy.utils.register_class(AIHELPER_OT_inspector_apply_vertex)
+    bpy.utils.register_class(AIHELPER_OT_inspector_apply_edge_length)
+    bpy.utils.register_class(AIHELPER_OT_inspector_apply_edge_angle)
+    bpy.utils.register_class(AIHELPER_OT_inspector_apply_arc)
+    bpy.utils.register_class(AIHELPER_OT_inspector_apply_rectangle)
 
 
 def unregister():
+    bpy.utils.unregister_class(AIHELPER_OT_inspector_apply_rectangle)
+    bpy.utils.unregister_class(AIHELPER_OT_inspector_apply_arc)
+    bpy.utils.unregister_class(AIHELPER_OT_inspector_apply_edge_angle)
+    bpy.utils.unregister_class(AIHELPER_OT_inspector_apply_edge_length)
+    bpy.utils.unregister_class(AIHELPER_OT_inspector_apply_vertex)
+    bpy.utils.unregister_class(AIHELPER_OT_select_tag)
     bpy.utils.unregister_class(AIHELPER_OT_set_angle_snap_preset)
     bpy.utils.unregister_class(AIHELPER_OT_set_edge_angle)
     bpy.utils.unregister_class(AIHELPER_OT_set_edge_length)
     bpy.utils.unregister_class(AIHELPER_OT_set_vertex_coords)
+    bpy.utils.unregister_class(AIHELPER_OT_edit_rectangle)
+    bpy.utils.unregister_class(AIHELPER_OT_add_polyline)
+    bpy.utils.unregister_class(AIHELPER_OT_add_rectangle)
+    bpy.utils.unregister_class(AIHELPER_OT_edit_arc)
+    bpy.utils.unregister_class(AIHELPER_OT_add_arc)
     bpy.utils.unregister_class(AIHELPER_OT_add_circle)
+    bpy.utils.unregister_class(AIHELPER_OT_add_line)
     bpy.utils.unregister_class(AIHELPER_OT_sketch_mode)

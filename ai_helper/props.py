@@ -1,10 +1,41 @@
 import bpy
 
+from .llm.presets import preset_items
+from .llm.recipes import recipe_items
+
 
 class AIHelperProperties(bpy.types.PropertyGroup):
     prompt: bpy.props.StringProperty(
         name="Prompt",
         description="Describe the operation to run on the selection",
+        default="",
+    )
+    prompt_preset: bpy.props.EnumProperty(
+        name="Preset",
+        description="Preset prompt templates",
+        items=preset_items(),
+        default="NONE",
+    )
+    prompt_recipe: bpy.props.EnumProperty(
+        name="Recipe",
+        description="Prompt recipes for common LLM workflows",
+        items=recipe_items(),
+        default="NONE",
+    )
+    image_path: bpy.props.StringProperty(
+        name="Image Path",
+        description="Optional image for LLM sketch generation",
+        default="",
+        subtype="FILE_PATH",
+    )
+    image_url: bpy.props.StringProperty(
+        name="Image URL",
+        description="HTTPS image URL for vision models",
+        default="",
+    )
+    image_notes: bpy.props.StringProperty(
+        name="Image Notes",
+        description="Notes to guide image-based sketch generation",
         default="",
     )
     tool_calls_json: bpy.props.StringProperty(
@@ -92,6 +123,100 @@ class AIHelperProperties(bpy.types.PropertyGroup):
         description="Grid step in scene units",
         default=1.0,
         min=0.001,
+    )
+    inspector_selection_key: bpy.props.StringProperty(
+        name="Inspector Selection Key",
+        description="Selection signature for inspector updates",
+        default="",
+    )
+    inspector_vertex_x: bpy.props.FloatProperty(
+        name="Vertex X",
+        description="Inspector vertex X",
+        default=0.0,
+    )
+    inspector_vertex_y: bpy.props.FloatProperty(
+        name="Vertex Y",
+        description="Inspector vertex Y",
+        default=0.0,
+    )
+    inspector_edge_length: bpy.props.FloatProperty(
+        name="Edge Length",
+        description="Inspector edge length",
+        min=0.0,
+        default=1.0,
+    )
+    inspector_edge_angle: bpy.props.FloatProperty(
+        name="Edge Angle",
+        description="Inspector edge angle (degrees)",
+        default=0.0,
+    )
+    inspector_edge_anchor: bpy.props.EnumProperty(
+        name="Edge Anchor",
+        description="Anchor for edge edits",
+        items=[
+            ("START", "Start", "Keep the first vertex fixed"),
+            ("END", "End", "Keep the second vertex fixed"),
+            ("CENTER", "Center", "Keep the midpoint fixed"),
+        ],
+        default="START",
+    )
+    inspector_arc_center_x: bpy.props.FloatProperty(
+        name="Arc Center X",
+        description="Inspector arc center X",
+        default=0.0,
+    )
+    inspector_arc_center_y: bpy.props.FloatProperty(
+        name="Arc Center Y",
+        description="Inspector arc center Y",
+        default=0.0,
+    )
+    inspector_arc_radius: bpy.props.FloatProperty(
+        name="Arc Radius",
+        description="Inspector arc radius",
+        min=0.0,
+        default=1.0,
+    )
+    inspector_arc_start_angle: bpy.props.FloatProperty(
+        name="Arc Start Angle",
+        description="Inspector arc start angle (degrees)",
+        default=0.0,
+    )
+    inspector_arc_end_angle: bpy.props.FloatProperty(
+        name="Arc End Angle",
+        description="Inspector arc end angle (degrees)",
+        default=90.0,
+    )
+    inspector_arc_clockwise: bpy.props.BoolProperty(
+        name="Arc Clockwise",
+        description="Inspector arc clockwise flag",
+        default=False,
+    )
+    inspector_rect_center_x: bpy.props.FloatProperty(
+        name="Rect Center X",
+        description="Inspector rectangle center X",
+        default=0.0,
+    )
+    inspector_rect_center_y: bpy.props.FloatProperty(
+        name="Rect Center Y",
+        description="Inspector rectangle center Y",
+        default=0.0,
+    )
+    inspector_rect_width: bpy.props.FloatProperty(
+        name="Rect Width",
+        description="Inspector rectangle width",
+        min=0.0,
+        default=1.0,
+    )
+    inspector_rect_height: bpy.props.FloatProperty(
+        name="Rect Height",
+        description="Inspector rectangle height",
+        min=0.0,
+        default=1.0,
+    )
+    inspector_rect_rotation: bpy.props.FloatProperty(
+        name="Rect Rotation",
+        description="Inspector rectangle rotation (degrees)",
+        default=0.0,
     )
 
 

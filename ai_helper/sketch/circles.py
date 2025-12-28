@@ -28,14 +28,27 @@ def load_circles(obj) -> List[Dict[str, object]]:
             continue
         if "id" not in item or "center" not in item or "verts" not in item:
             continue
-        circles.append(
-            {
-                "id": str(item["id"]),
-                "center": str(item["center"]),
-                "verts": [str(v) for v in item.get("verts", [])],
-                "radius": float(item.get("radius", 0.0)),
-            }
-        )
+        circle = {
+            "id": str(item["id"]),
+            "center": str(item["center"]),
+            "verts": [str(v) for v in item.get("verts", [])],
+            "radius": float(item.get("radius", 0.0)),
+        }
+        if "is_arc" in item:
+            circle["is_arc"] = bool(item.get("is_arc"))
+        if "start_angle" in item:
+            try:
+                circle["start_angle"] = float(item.get("start_angle"))
+            except (TypeError, ValueError):
+                pass
+        if "end_angle" in item:
+            try:
+                circle["end_angle"] = float(item.get("end_angle"))
+            except (TypeError, ValueError):
+                pass
+        if "clockwise" in item:
+            circle["clockwise"] = bool(item.get("clockwise"))
+        circles.append(circle)
     return circles
 
 
@@ -47,6 +60,11 @@ def append_circle(obj, circle: Dict[str, object]) -> None:
     circles = load_circles(obj)
     circles.append(circle)
     save_circles(obj, circles)
+
+
+def clear_circles(obj) -> None:
+    if _CIRCLES_KEY in obj:
+        del obj[_CIRCLES_KEY]
 
 
 def find_circle(circles: List[Dict[str, object]], circle_id: str) -> Optional[Dict[str, object]]:

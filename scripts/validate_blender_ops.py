@@ -1,7 +1,9 @@
 import math
 import os
 import sys
+import tempfile
 import types
+from pathlib import Path
 
 import bpy
 import bmesh
@@ -13,11 +15,13 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import ai_helper  # noqa: E402
-from ai_helper.llm import dispatch_tool_calls  # noqa: E402
+from ai_helper.llm import GrokAdapter, dispatch_tool_calls  # noqa: E402
 from ai_helper.sketch.circles import load_circles  # noqa: E402
 from ai_helper.sketch.constraints import AngleConstraint, RadiusConstraint  # noqa: E402
 from ai_helper.sketch.history import load_history, restore_snapshot, snapshot_state  # noqa: E402
+from ai_helper.sketch.rectangles import load_rectangles  # noqa: E402
 from ai_helper.sketch.store import load_constraints  # noqa: E402
+from ai_helper.sketch.tags import load_tags, register_tag  # noqa: E402
 from ai_helper.ops.constraints import (  # noqa: E402
     _angle_targets,
     _circle_current_radius,
@@ -159,6 +163,102 @@ def test_precision_edge_angle():
     angle = math.degrees(math.atan2(v2.y - v1.y, v2.x - v1.x))
     check(abs(angle - 90.0) < 1e-2, "edge angle incorrect")
 
+
+def test_inspector_vertex():
+    obj = new_sketch()
+    v_indices, _ = build_mesh(obj, [(0.0, 0.0, 0.0)], [])
+    select(obj, verts=[v_indices[0]])
+    props = bpy.context.scene.ai_helper
+    props.inspector_vertex_x = 2.5
+    props.inspector_vertex_y = -1.5
+    result = bpy.ops.aihelper.inspector_apply_vertex()
+    check("FINISHED" in result, "inspector vertex apply failed")
+    v = obj.data.vertices[v_indices[0]]
+    check(abs(v.co.x - 2.5) < 1e-4 and abs(v.co.y + 1.5) < 1e-4, "inspector vertex coords incorrect")
+
+
+def test_inspector_edge():
+    obj = new_sketch()
+    v_indices, e_indices = build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
+    select(obj, edges=[e_indices[0]])
+    props = bpy.context.scene.ai_helper
+    props.inspector_edge_length = 3.0
+    props.inspector_edge_anchor = "START"
+    result = bpy.ops.aihelper.inspector_apply_edge_length()
+    check("FINISHED" in result, "inspector edge length apply failed")
+    v1 = obj.data.vertices[v_indices[0]].co
+    v2 = obj.data.vertices[v_indices[1]].co
+    check(abs((v2 - v1).length - 3.0) < 1e-4, "inspector edge length incorrect")
+
+    props.inspector_edge_angle = 90.0
+    result = bpy.ops.aihelper.inspector_apply_edge_angle()
+    check("FINISHED" in result, "inspector edge angle apply failed")
+    v1 = obj.data.vertices[v_indices[0]].co
+    v2 = obj.data.vertices[v_indices[1]].co
+    angle = math.degrees(math.atan2(v2.y - v1.y, v2.x - v1.x))
+    check(abs(angle - 90.0) < 1e-2, "inspector edge angle incorrect")
+
+
+def test_inspector_arc():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_arc(
+        radius=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        start_angle=0.0,
+        end_angle=90.0,
+        segments=8,
+    )
+    check("FINISHED" in result, "add_arc operator failed for inspector")
+    select(obj, edges=[0])
+    props = bpy.context.scene.ai_helper
+    props.inspector_arc_radius = 2.0
+    props.inspector_arc_center_x = 1.0
+    props.inspector_arc_center_y = 0.0
+    props.inspector_arc_start_angle = 0.0
+    props.inspector_arc_end_angle = 180.0
+    result = bpy.ops.aihelper.inspector_apply_arc()
+    check("FINISHED" in result, "inspector arc apply failed")
+    circles = load_circles(obj)
+    check(len(circles) == 1, "inspector arc circle missing")
+    circle = circles[0]
+    check(abs(circle.get("radius", 0.0) - 2.0) < 1e-4, "inspector arc radius not updated")
+
+
+def test_inspector_rectangle():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_rectangle(
+        width=2.0,
+        height=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+    )
+    check("FINISHED" in result, "add_rectangle operator failed for inspector")
+    rects = load_rectangles(obj)
+    check(len(rects) == 1, "inspector rectangle metadata missing")
+    rect = rects[0]
+    vert_ids = [int(v) for v in rect.get("verts", [])]
+    orig_coords = [obj.data.vertices[vid].co.copy() for vid in vert_ids]
+
+    select(obj, edges=[0])
+    props = bpy.context.scene.ai_helper
+    props.inspector_rect_center_x = 1.0
+    props.inspector_rect_center_y = -1.0
+    props.inspector_rect_width = 4.0
+    props.inspector_rect_height = 2.0
+    props.inspector_rect_rotation = 15.0
+    result = bpy.ops.aihelper.inspector_apply_rectangle()
+    check("FINISHED" in result, "inspector rectangle apply failed")
+    rects = load_rectangles(obj)
+    check(len(rects) == 1, "inspector rectangle missing")
+    rect = rects[0]
+    center = rect.get("center", [0.0, 0.0])
+    check(abs(center[0] - 1.0) < 1e-3 and abs(center[1] + 1.0) < 1e-3, "inspector rectangle center not applied")
+    check(rect.get("width", 0.0) > 0.0 and rect.get("height", 0.0) > 0.0, "inspector rectangle size invalid")
+    coords = [obj.data.vertices[vid].co for vid in vert_ids]
+    moved = any((coords[idx] - orig_coords[idx]).length > 0.1 for idx in range(len(coords)))
+    check(moved, "inspector rectangle vertices did not move")
 
 def test_midpoint_constraint():
     obj = new_sketch()
@@ -554,6 +654,28 @@ def test_extrude_rebuild():
     check(abs(max_z - 3.0) < 1e-3, "extrude rebuild incorrect")
 
 
+def test_extrude_selection():
+    obj = new_sketch()
+    build_mesh(obj, [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 1.0, 0.0)], [(0, 1), (1, 2)])
+    select(obj, edges=[0])
+    selected = [edge.index for edge in obj.data.edges if edge.select]
+    check(selected, "extrude selection test missing selected edges")
+    before = {o.name for o in bpy.data.objects}
+    result = bpy.ops.aihelper.extrude_sketch(distance=1.0, use_selection=True)
+    check("FINISHED" in result, "extrude_sketch selection failed")
+    new_names = [name for name in bpy.data.objects.keys() if name not in before]
+    extrude_obj = None
+    for name in new_names:
+        candidate = bpy.data.objects.get(name)
+        if candidate and candidate.get("ai_helper_op") == "extrude":
+            extrude_obj = candidate
+            break
+    check(extrude_obj is not None, "extrude object missing for selection")
+    stored = extrude_obj.get("ai_helper_extrude_edges")
+    stored_indices = list(stored) if stored is not None else []
+    check(sorted(stored_indices) == sorted(selected), "extrude selection indices not stored")
+
+
 def test_revolve_rebuild():
     obj = new_sketch()
     build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
@@ -652,6 +774,353 @@ def test_llm_auto_constraints():
     check(len(constraints) == 1, "llm constraint not added")
 
 
+def test_llm_sketch_generation():
+    obj = new_sketch()
+    tool_calls = [
+        {"name": "add_line", "arguments": {"start_x": 0.0, "start_y": 0.0, "end_x": 2.0, "end_y": 0.0, "tag": "base"}},
+        {"name": "add_circle", "arguments": {"center_x": 1.0, "center_y": 1.0, "radius": 0.5, "tag": "hole"}},
+        {"name": "select_sketch_entities", "arguments": {"tags": ["base"]}},
+        {"name": "add_constraint", "arguments": {"kind": "distance", "distance": 2.0}},
+        {"name": "select_sketch_entities", "arguments": {"tags": ["hole"]}},
+        {"name": "add_constraint", "arguments": {"kind": "radius", "radius": 0.5}},
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm sketch tool errors")
+    constraints = load_constraints(obj)
+    check(len(constraints) >= 2, "llm sketch constraints missing")
+    tags = load_tags(obj)
+    check("base" in tags and "hole" in tags, "llm tags missing")
+
+    result = dispatch_tool_calls([{"name": "clear_sketch", "arguments": {}}], bpy.context, preview=False)
+    check(not result["errors"], "llm clear_sketch errors")
+    check(len(obj.data.vertices) == 0 and len(obj.data.edges) == 0, "clear_sketch did not clear mesh")
+    check(len(load_constraints(obj)) == 0, "clear_sketch did not clear constraints")
+
+
+def test_llm_polyline_rectangle():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 2.0,
+                "height": 1.0,
+                "rotation_deg": 30.0,
+                "tag": "rect",
+            },
+        },
+        {"name": "add_polyline", "arguments": {"points": [[3.0, 0.0], [4.0, 0.0], [4.0, 1.0]], "tag": "pline"}},
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm polyline/rectangle errors")
+    tags = load_tags(obj)
+    check("rect" in tags and "pline" in tags, "llm polyline/rectangle tags missing")
+    check(len(obj.data.edges) >= 6, "llm polyline/rectangle edges missing")
+
+
+def test_llm_arc():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_arc",
+            "arguments": {"center_x": 0.0, "center_y": 0.0, "radius": 1.0, "start_angle": 0.0, "end_angle": 90.0, "tag": "arc"},
+        }
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm arc errors")
+    circles = load_circles(obj)
+    check(len(circles) == 1, "llm arc circle missing")
+    circle = circles[0]
+    check(circle.get("is_arc") is True, "llm arc flag missing")
+    check(len(obj.data.edges) >= 1, "llm arc edges missing")
+
+
+def test_edit_arc_operator():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_arc(
+        radius=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        start_angle=0.0,
+        end_angle=90.0,
+        segments=8,
+    )
+    check("FINISHED" in result, "add_arc operator failed")
+    select(obj, edges=[0])
+    result = bpy.ops.aihelper.edit_arc(
+        radius=2.0,
+        center_x=1.0,
+        center_y=0.0,
+        start_angle=0.0,
+        end_angle=180.0,
+    )
+    check("FINISHED" in result, "edit_arc operator failed")
+    circles = load_circles(obj)
+    check(len(circles) == 1, "edit_arc circle missing")
+    circle = circles[0]
+    check(abs(circle.get("radius", 0.0) - 2.0) < 1e-4, "edit_arc radius not updated")
+    center_idx = int(circle.get("center"))
+    center = obj.data.vertices[center_idx].co
+    vert_id = int(circle.get("verts", [0])[0])
+    vert = obj.data.vertices[vert_id].co
+    dist = (vert - center).length
+    check(abs(dist - 2.0) < 1e-3, "edit_arc geometry not updated")
+
+
+def test_llm_edit_arc():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_arc",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "radius": 1.0,
+                "start_angle": 0.0,
+                "end_angle": 90.0,
+                "tag": "arc",
+            },
+        },
+        {
+            "name": "edit_arc",
+            "arguments": {
+                "tag": "arc",
+                "radius": 2.0,
+                "start_angle": 0.0,
+                "end_angle": 180.0,
+            },
+        },
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm edit_arc errors")
+    circles = load_circles(obj)
+    check(len(circles) == 1, "llm edit_arc circle missing")
+    circle = circles[0]
+    check(abs(circle.get("radius", 0.0) - 2.0) < 1e-4, "llm edit_arc radius not updated")
+    check(abs(circle.get("start_angle", 0.0) - 0.0) < 1e-4, "llm edit_arc start angle not updated")
+    check(abs(circle.get("end_angle", 0.0) - 180.0) < 1e-4, "llm edit_arc end angle not updated")
+
+
+def test_edit_rectangle_operator():
+    obj = new_sketch()
+    result = bpy.ops.aihelper.add_rectangle(
+        width=2.0,
+        height=1.0,
+        center_x=0.0,
+        center_y=0.0,
+        rotation_deg=0.0,
+    )
+    check("FINISHED" in result, "add_rectangle operator failed")
+    rects = load_rectangles(obj)
+    check(len(rects) == 1, "rectangle metadata missing")
+    rect = rects[0]
+    vert_ids = [int(v) for v in rect.get("verts", [])]
+    orig_coords = [obj.data.vertices[vid].co.copy() for vid in vert_ids]
+
+    select(obj, edges=[0])
+    result = bpy.ops.aihelper.edit_rectangle(
+        width=4.0,
+        height=2.0,
+        center_x=1.0,
+        center_y=1.0,
+        rotation_deg=30.0,
+    )
+    check("FINISHED" in result, "edit_rectangle operator failed")
+    rects = load_rectangles(obj)
+    rect = rects[0]
+    center = rect.get("center", [0.0, 0.0])
+    check(abs(center[0] - 1.0) < 1e-3 and abs(center[1] - 1.0) < 1e-3, "rectangle center not updated")
+    check(rect.get("width", 0.0) > 0.0 and rect.get("height", 0.0) > 0.0, "rectangle size invalid")
+    coords = [obj.data.vertices[vid].co for vid in vert_ids]
+    moved = any((coords[idx] - orig_coords[idx]).length > 0.1 for idx in range(len(coords)))
+    check(moved, "rectangle vertices did not move")
+
+
+def test_llm_edit_rectangle():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 2.0,
+                "height": 1.0,
+                "rotation_deg": 0.0,
+                "tag": "rect",
+            },
+        },
+        {
+            "name": "edit_rectangle",
+            "arguments": {
+                "tag": "rect",
+                "center_x": 1.0,
+                "center_y": 1.0,
+                "width": 4.0,
+                "height": 2.0,
+                "rotation_deg": 30.0,
+            },
+        },
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm edit_rectangle errors")
+    rects = load_rectangles(obj)
+    check(len(rects) == 1, "llm rectangle metadata missing")
+    rect = rects[0]
+    center = rect.get("center", [0.0, 0.0])
+    check(abs(center[0] - 1.0) < 1e-3 and abs(center[1] - 1.0) < 1e-3, "llm rectangle center not updated")
+    check(rect.get("width", 0.0) > 0.0 and rect.get("height", 0.0) > 0.0, "llm rectangle size invalid")
+
+
+def test_llm_image_prompt_mock():
+    temp_path = Path(tempfile.gettempdir()) / "ai_helper_mock_image.txt"
+    temp_path.write_text("mock image data")
+    adapter = GrokAdapter(adapter_path=None, mock=True)
+    calls = adapter.request_tool_calls(
+        "sketch from image",
+        {"objects": []},
+        use_mock=True,
+        image_path=str(temp_path),
+        image_notes="base",
+    )
+    check(calls and calls[0].name in ("add_line", "add_circle"), "llm image mock failed")
+    try:
+        temp_path.unlink()
+    except FileNotFoundError:
+        pass
+
+    adapter = GrokAdapter(adapter_path=None, mock=True)
+    calls = adapter.request_tool_calls(
+        "sketch from image url",
+        {"objects": []},
+        use_mock=True,
+        image_path="https://example.com/image.png",
+        image_notes="url",
+    )
+    check(calls and calls[0].name in ("add_line", "add_circle"), "llm image url mock failed")
+
+
+def test_prompt_preset_operator():
+    props = bpy.context.scene.ai_helper
+    props.prompt = ""
+    props.prompt_preset = "PLATE_4_HOLES"
+    result = bpy.ops.aihelper.apply_prompt_preset(append=False)
+    check("FINISHED" in result, "apply_prompt_preset failed")
+    check("rectangular plate" in props.prompt, "preset prompt not applied")
+
+    props.prompt = "Base prompt"
+    props.prompt_preset = "L_BRACKET"
+    result = bpy.ops.aihelper.apply_prompt_preset(append=True)
+    check("FINISHED" in result, "append prompt preset failed")
+    check("Base prompt" in props.prompt and "L-shaped" in props.prompt, "append preset missing content")
+
+
+def test_prompt_recipe_operator():
+    props = bpy.context.scene.ai_helper
+    props.prompt = ""
+    props.prompt_recipe = "SKETCH_FROM_NOTES"
+    result = bpy.ops.aihelper.apply_prompt_recipe(append=False)
+    check("FINISHED" in result, "apply_prompt_recipe failed")
+    check("clean 2D sketch" in props.prompt, "recipe prompt not applied")
+
+    props.prompt = "Base prompt"
+    props.prompt_recipe = "AUTO_CONSTRAIN"
+    result = bpy.ops.aihelper.apply_prompt_recipe(append=True)
+    check("FINISHED" in result, "append prompt recipe failed")
+    check("Base prompt" in props.prompt and "horizontal/vertical" in props.prompt, "append recipe missing content")
+
+
+def test_param_preset_operator():
+    props = bpy.context.scene.ai_helper
+    props.prompt = ""
+    props.prompt_preset = "PLATE_4_HOLES"
+    result = bpy.ops.aihelper.apply_param_preset(
+        append=False,
+        width=120.0,
+        height=80.0,
+        hole_radius=6.0,
+        hole_offset_x=40.0,
+        hole_offset_y=20.0,
+    )
+    check("FINISHED" in result, "apply_param_preset failed")
+    check("120x80" in props.prompt, "param preset width/height missing")
+    check("radius 6" in props.prompt, "param preset radius missing")
+
+    props.prompt = ""
+    props.prompt_preset = "BOLT_CIRCLE"
+    result = bpy.ops.aihelper.apply_param_preset(
+        append=False,
+        bolt_count=8.0,
+        bolt_circle_radius=50.0,
+        bolt_hole_radius=4.0,
+    )
+    check("FINISHED" in result, "apply_param_preset bolt circle failed")
+    check("8 holes" in props.prompt, "bolt circle count missing")
+    check("radius 4" in props.prompt, "bolt circle hole radius missing")
+
+
+def test_preferences_fields():
+    addon = bpy.context.preferences.addons.get("ai_helper")
+    if addon is None:
+        return
+    prefs = addon.preferences
+    check(hasattr(prefs, "grok_model"), "prefs missing grok_model")
+    check(hasattr(prefs, "grok_vision_model"), "prefs missing grok_vision_model")
+    check(hasattr(prefs, "grok_vision_image_url"), "prefs missing grok_vision_image_url")
+    check(hasattr(prefs, "grok_vision_upload_command"), "prefs missing grok_vision_upload_command")
+    check(hasattr(prefs, "grok_vision_upload_timeout"), "prefs missing grok_vision_upload_timeout")
+    prefs.grok_model = "grok-4-1-fast-reasoning"
+    prefs.grok_vision_model = "grok-4-1-fast-reasoning"
+    prefs.grok_vision_image_url = "https://example.com/image.png"
+    check("grok-4-1" in prefs.grok_model, "prefs grok_model not set")
+
+
+def test_install_deps_operator_exists():
+    check(hasattr(bpy.ops.aihelper, "install_grok_deps"), "install_grok_deps operator missing")
+
+
+def test_upload_command_parsing():
+    temp_path = Path(tempfile.gettempdir()) / "ai_helper_upload_mock.txt"
+    temp_path.write_text("mock")
+    exe_name = os.path.basename(sys.executable or "")
+    if Path("/bin/echo").exists():
+        cmd = "/bin/echo https://example.com/upload.png"
+    elif "python" in exe_name:
+        cmd = f"{sys.executable} -c \"print('https://example.com/upload.png')\""
+    elif os.name != "nt":
+        cmd = "sh -c \"printf 'https://example.com/upload.png'\""
+    else:
+        temp_path.unlink(missing_ok=True)
+        return
+    adapter = GrokAdapter(adapter_path=None, mock=True)
+    calls = adapter.request_tool_calls(
+        "sketch from upload",
+        {"objects": []},
+        use_mock=True,
+        image_path=str(temp_path),
+        upload_command=cmd,
+    )
+    check(calls and calls[0].name in ("add_line", "add_circle"), "upload command mock failed")
+    try:
+        temp_path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def test_tag_selection_operator():
+    obj = new_sketch()
+    _verts, _edges = build_mesh(obj, [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)], [(0, 1)])
+    register_tag(obj, "edge_tag", verts=[0, 1], edges=[0])
+    result = bpy.ops.aihelper.select_tag(tag="edge_tag", extend=False)
+    check("FINISHED" in result, "select_tag failed")
+    sel_verts = selected_vertex_indices(obj)
+    sel_edges = [e.index for e in obj.data.edges if e.select]
+    check(sel_verts == [], "tag selection verts mismatch")
+    check(sel_edges == [0], "tag selection edges mismatch")
+
+
 def test_auto_rebuild_handler():
     obj = new_sketch()
     build_mesh(obj, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], [(0, 1)])
@@ -683,6 +1152,10 @@ def run():
     test_precision_vertex_coords()
     test_precision_edge_length()
     test_precision_edge_angle()
+    test_inspector_vertex()
+    test_inspector_edge()
+    test_inspector_arc()
+    test_inspector_rectangle()
     test_midpoint_constraint()
     test_equal_length_constraint()
     test_coincident_constraint()
@@ -700,8 +1173,24 @@ def run():
     test_extrude_rebuild()
     test_revolve_rebuild()
     test_shell_and_bevel_modifiers()
+    test_extrude_selection()
     test_history_snapshot_restore()
     test_llm_auto_constraints()
+    test_llm_sketch_generation()
+    test_llm_polyline_rectangle()
+    test_llm_arc()
+    test_edit_arc_operator()
+    test_llm_edit_arc()
+    test_llm_image_prompt_mock()
+    test_edit_rectangle_operator()
+    test_llm_edit_rectangle()
+    test_prompt_preset_operator()
+    test_prompt_recipe_operator()
+    test_param_preset_operator()
+    test_preferences_fields()
+    test_install_deps_operator_exists()
+    test_upload_command_parsing()
+    test_tag_selection_operator()
     test_auto_rebuild_handler()
     print("ALL TESTS PASSED")
 

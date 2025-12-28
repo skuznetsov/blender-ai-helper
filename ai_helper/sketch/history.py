@@ -10,6 +10,8 @@ from mathutils import Vector
 from .circles import load_circles, save_circles
 from .constraints import constraint_from_dict, constraints_to_dict, SketchConstraint
 from .store import load_constraints, save_constraints
+from .rectangles import load_rectangles, save_rectangles
+from .tags import load_tags, save_tags
 
 
 _HISTORY_KEY = "ai_helper_history"
@@ -38,12 +40,16 @@ def snapshot_state(obj, label: str) -> Dict[str, object]:
     edges = [[e.vertices[0], e.vertices[1]] for e in obj.data.edges]
     constraints = constraints_to_dict(load_constraints(obj))
     circles = load_circles(obj)
+    rectangles = load_rectangles(obj)
+    tags = load_tags(obj)
     entry = {
         "label": label,
         "verts": verts,
         "edges": edges,
         "constraints": constraints,
         "circles": circles,
+        "rectangles": rectangles,
+        "tags": tags,
     }
 
     history = load_history(obj)
@@ -59,6 +65,8 @@ def restore_snapshot(obj, snapshot: Dict[str, object]) -> List[SketchConstraint]
     edges = snapshot.get("edges", [])
     constraints = snapshot.get("constraints", [])
     circles = snapshot.get("circles", [])
+    rectangles = snapshot.get("rectangles", [])
+    tags = snapshot.get("tags", {})
 
     _replace_mesh(obj, verts, edges)
 
@@ -73,6 +81,10 @@ def restore_snapshot(obj, snapshot: Dict[str, object]) -> List[SketchConstraint]
 
     if isinstance(circles, list):
         save_circles(obj, circles)
+    if isinstance(rectangles, list):
+        save_rectangles(obj, rectangles)
+    if isinstance(tags, dict):
+        save_tags(obj, tags)
 
     return restored_constraints
 
