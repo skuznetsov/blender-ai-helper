@@ -271,6 +271,14 @@ Legend: [ ] TODO | [~] IN_PROGRESS | [x] DONE
 - [x] Loft across 3+ tagged profiles with alignment.
   - DoD: `blender -b --python scripts/validate_blender_ops.py` passes loft tests.
 
+## 38) Dev reload controls (SAFE)
+- [x] Add Reload Add-on button and auto-reload timer.
+  - DoD: reload operator available; auto-reload toggles from prefs.
+
+## 39) LLM loft/sweep tool calls (SAFE)
+- [x] Expose loft/sweep in tool schema + dispatcher + tests.
+  - DoD: LLM loft/sweep tests pass in `scripts/validate_blender_ops.py`.
+
 ## 37) Install script + docs (SAFE)
 - [x] Add install/update script and document usage.
   - DoD: `scripts/install_addon.sh` exists and Quick Start mentions it.

@@ -1094,6 +1094,89 @@ def test_llm_edit_rectangle():
     check(rect.get("width", 0.0) > 0.0 and rect.get("height", 0.0) > 0.0, "llm rectangle size invalid")
 
 
+def test_llm_loft_profiles():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 2.0,
+                "height": 1.0,
+                "rotation_deg": 0.0,
+                "tag": "profile_a",
+            },
+        },
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 1.5,
+                "height": 0.8,
+                "rotation_deg": 0.0,
+                "tag": "profile_b",
+            },
+        },
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 1.0,
+                "height": 0.5,
+                "rotation_deg": 0.0,
+                "tag": "profile_c",
+            },
+        },
+        {
+            "name": "loft_profiles",
+            "arguments": {
+                "profile_tags": ["profile_a", "profile_b", "profile_c"],
+                "offset_z": 1.0,
+            },
+        },
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm loft_profiles errors")
+    loft_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "loft"), None)
+    check(loft_obj is not None, "llm loft object missing")
+
+
+def test_llm_sweep_profile():
+    obj = new_sketch()
+    tool_calls = [
+        {
+            "name": "add_rectangle",
+            "arguments": {
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "width": 2.0,
+                "height": 1.0,
+                "rotation_deg": 0.0,
+                "tag": "profile",
+            },
+        },
+        {
+            "name": "add_polyline",
+            "arguments": {
+                "points": [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0]],
+                "auto_constraints": False,
+                "tag": "path",
+            },
+        },
+        {
+            "name": "sweep_profile",
+            "arguments": {"profile_tag": "profile", "path_tag": "path", "twist_deg": 15.0},
+        },
+    ]
+    result = dispatch_tool_calls(tool_calls, bpy.context, preview=False)
+    check(not result["errors"], "llm sweep_profile errors")
+    sweep_obj = next((o for o in bpy.data.objects if o.get("ai_helper_op") == "sweep"), None)
+    check(sweep_obj is not None, "llm sweep object missing")
+
+
 def test_llm_image_prompt_mock():
     temp_path = Path(tempfile.gettempdir()) / "ai_helper_mock_image.txt"
     temp_path.write_text("mock image data")
@@ -1307,6 +1390,8 @@ def run():
     test_llm_image_prompt_mock()
     test_edit_rectangle_operator()
     test_llm_edit_rectangle()
+    test_llm_loft_profiles()
+    test_llm_sweep_profile()
     test_prompt_preset_operator()
     test_prompt_recipe_operator()
     test_param_preset_operator()

@@ -10,6 +10,8 @@
 1. Run `./scripts/install_addon.sh --method symlink` from the repo root.
 2. Open Blender > Edit > Preferences > Add-ons and enable "AI Helper".
 3. After code changes, use F3 > "Reload Scripts" or disable/enable the add-on.
+4. Optional: enable Auto Reload in add-on preferences to reload when files change.
+5. Optional: use the "Reload Add-on" button in View3D > AI Helper > Dev.
 
 ## LLM Preview
 1. Open View3D > Sidebar > AI Helper.
@@ -20,6 +22,7 @@
 6. Inspect the preview and click Apply.
 7. For constraints, select sketch geometry and ask for a constraint (e.g., "add horizontal constraint").
 8. For sketch generation, describe the geometry or attach an image and notes (uses add_line/add_circle/add_arc/add_polyline/add_rectangle tool calls).
+9. For 3D ops, tag profiles/paths and ask for loft or sweep by tag.
 
 ## Sketch (WIP)
 - Sketch Mode creates line segments on the XY plane.

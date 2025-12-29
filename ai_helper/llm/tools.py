@@ -181,4 +181,30 @@ def get_tool_schema() -> List[Dict[str, Any]]:
             "description": "Solve sketch constraints",
             "parameters": {"type": "object", "properties": {}},
         },
+        {
+            "name": "loft_profiles",
+            "description": "Loft between tagged profile edge sets",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "profile_tags": {"type": "array", "items": {"type": "string"}},
+                    "profile_a_tag": {"type": "string"},
+                    "profile_b_tag": {"type": "string"},
+                    "offset_z": {"type": "number"},
+                },
+            },
+        },
+        {
+            "name": "sweep_profile",
+            "description": "Sweep a tagged profile along a tagged path",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "profile_tag": {"type": "string"},
+                    "path_tag": {"type": "string"},
+                    "twist_deg": {"type": "number"},
+                },
+                "required": ["profile_tag", "path_tag"],
+            },
+        },
     ]

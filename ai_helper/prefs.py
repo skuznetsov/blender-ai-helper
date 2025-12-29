@@ -1,10 +1,14 @@
 import bpy
 
-from .core import logger
+from .core import auto_reload, logger
 
 
 def _update_debug(self, _context):
     logger.set_debug(self.debug)
+
+
+def _update_auto_reload(self, _context):
+    auto_reload.ensure_timer()
 
 
 class AIHelperPreferences(bpy.types.AddonPreferences):
@@ -50,6 +54,19 @@ class AIHelperPreferences(bpy.types.AddonPreferences):
         min=5,
         max=300,
     )
+    auto_reload_enabled: bpy.props.BoolProperty(
+        name="Auto Reload",
+        description="Automatically reload the addon when files change",
+        default=False,
+        update=_update_auto_reload,
+    )
+    auto_reload_interval: bpy.props.FloatProperty(
+        name="Auto Reload Interval",
+        description="Seconds between change checks",
+        default=1.0,
+        min=0.2,
+        max=10.0,
+    )
 
     def draw(self, _context):
         layout = self.layout
@@ -61,6 +78,10 @@ class AIHelperPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "grok_vision_upload_command")
         layout.prop(self, "grok_vision_upload_timeout")
         layout.operator("aihelper.install_grok_deps", text="Install aiohttp")
+        layout.separator()
+        layout.label(text="Dev")
+        layout.prop(self, "auto_reload_enabled")
+        layout.prop(self, "auto_reload_interval")
 
 
 def register():

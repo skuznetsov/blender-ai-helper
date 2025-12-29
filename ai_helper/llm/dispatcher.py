@@ -708,6 +708,57 @@ def _solve_constraints(_context, _args: Dict[str, Any], preview: bool, messages:
     bpy.ops.aihelper.solve_constraints()
 
 
+def _loft_profiles(_context, args: Dict[str, Any], preview: bool, messages: List[str]) -> None:
+    profile_tags = args.get("profile_tags")
+    tags = []
+    if isinstance(profile_tags, list):
+        tags = [str(tag).strip() for tag in profile_tags if tag]
+    elif isinstance(profile_tags, str):
+        tags = [tag.strip() for tag in profile_tags.split(",") if tag.strip()]
+
+    offset_z = _coerce_float(args.get("offset_z"), 1.0)
+
+    if tags:
+        messages.append(f"loft_profiles tags={len(tags)} offset_z={offset_z:g}")
+        if preview:
+            return
+        result = bpy.ops.aihelper.loft_profiles(profile_tags=", ".join(tags), offset_z=offset_z)
+        if "FINISHED" not in result:
+            raise ValueError("loft_profiles operator failed")
+        return
+
+    tag_a = args.get("profile_a_tag")
+    tag_b = args.get("profile_b_tag")
+    if not tag_a or not tag_b:
+        raise ValueError("Missing profile tags")
+
+    messages.append(f"loft_profiles tags=2 offset_z={offset_z:g}")
+    if preview:
+        return
+    result = bpy.ops.aihelper.loft_profiles(profile_a_tag=str(tag_a), profile_b_tag=str(tag_b), offset_z=offset_z)
+    if "FINISHED" not in result:
+        raise ValueError("loft_profiles operator failed")
+
+
+def _sweep_profile(_context, args: Dict[str, Any], preview: bool, messages: List[str]) -> None:
+    profile_tag = args.get("profile_tag")
+    path_tag = args.get("path_tag")
+    if not profile_tag or not path_tag:
+        raise ValueError("Missing profile or path tag")
+
+    twist_deg = _coerce_float(args.get("twist_deg"), 0.0)
+    messages.append(f"sweep_profile twist={twist_deg:g}")
+    if preview:
+        return
+    result = bpy.ops.aihelper.sweep_profile(
+        profile_tag=str(profile_tag),
+        path_tag=str(path_tag),
+        twist_deg=twist_deg,
+    )
+    if "FINISHED" not in result:
+        raise ValueError("sweep_profile operator failed")
+
+
 _HANDLERS = {
     "transform_object": _transform_object,
     "rename_object": _rename_object,
@@ -725,4 +776,6 @@ _HANDLERS = {
     "select_sketch_entities": _select_sketch_entities,
     "add_constraint": _add_constraint,
     "solve_constraints": _solve_constraints,
+    "loft_profiles": _loft_profiles,
+    "sweep_profile": _sweep_profile,
 }

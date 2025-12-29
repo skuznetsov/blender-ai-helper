@@ -234,6 +234,12 @@ class AIHELPER_PT_main(bpy.types.Panel):
         layout.operator("aihelper.add_arc", text="Add Arc")
         layout.operator("aihelper.add_rectangle", text="Add Rectangle")
         layout.operator("aihelper.add_polyline", text="Add Polyline")
+        prefs = context.preferences.addons.get("ai_helper")
+        if prefs:
+            layout.separator()
+            layout.label(text="Dev")
+            layout.operator("aihelper.reload_addon", text="Reload Add-on")
+            layout.prop(prefs.preferences, "auto_reload_enabled", text="Auto Reload")
 
 
 class AIHELPER_PT_constraints(bpy.types.Panel):
